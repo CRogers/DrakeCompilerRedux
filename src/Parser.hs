@@ -36,6 +36,7 @@ parens = PT.parens lexer
 integer = PT.integer lexer
 ws = PT.whiteSpace lexer
 symbol = PT.symbol lexer
+braces = PT.braces lexer
 
 type Parser a = PP.Stream s m Char => PP.ParsecT s () m a
 
@@ -51,9 +52,7 @@ namespace :: Parser Namespace
 namespace = do
 	reserved "namespace"
 	n <- name
-	symbol "{"
-	cs <- many decl
-	symbol "}"
+	cs <- braces $ many decl
 	return $ Namespace n cs
 
 decl :: Parser Decl
