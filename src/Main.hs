@@ -3,6 +3,7 @@
 module Main where
 
 import Parser
+import Desugar
 
 main :: IO ()
 main = putStrLn "hi"

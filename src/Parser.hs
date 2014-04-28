@@ -52,22 +52,24 @@ namespace :: Parser Namespace
 namespace = do
 	reserved "namespace"
 	n <- name
-	cs <- braces $ many decl
+	cs <- braces $ many declInfo
 	return $ Namespace n cs
 
-decl :: Parser Decl
-decl = klass <|> interface
+declInfo :: Parser DeclInfo
+declInfo = do
+	(n, decl) <- klass <|> interface
+	return $ DeclInfo n decl
 
-klass :: Parser Decl
+klass :: Parser (Name, Decl)
 klass = do
 	reserved "class"
 	n <- name
 	semi
-	return $ Class n
+	return (n, Class [])
 
-interface :: Parser Decl
+interface :: Parser (Name, Decl)
 interface = do
 	reserved "interface"
 	n <- name
 	semi
-	return $ Interface n
+	return (n, Interface)
