@@ -18,7 +18,7 @@ data Decl
 	deriving (Eq,Show)
 
 data Visibility = Private | Public deriving (Eq,Show)
-data Static = Static | NotStatic deriving (Eq,Show)
+data Static = Static | Instance deriving (Eq,Show)
 
 data Param = Param Name deriving (Eq,Show)
 
