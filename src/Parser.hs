@@ -3,7 +3,6 @@
 
 module Parser where
 
-import Control.Monad (void)
 import Control.Applicative ((<$>))
 
 import Text.Parsec
@@ -23,7 +22,7 @@ langDef = PT.LanguageDef {
 	PT.identLetter     = alphaNum <|> char '_',
 	PT.opStart         = operators,
 	PT.opLetter        = operators,
-	PT.reservedNames   = ["namespace", "class", "private", "public", "static"],
+	PT.reservedNames   = ["namespace", "class", "private", "public", "static", "var"],
 	PT.reservedOpNames = ["=", ";"],
 	PT.caseSensitive   = False
 }
@@ -38,13 +37,12 @@ integer = PT.integer lexer
 ws = PT.whiteSpace lexer
 symbol = PT.symbol lexer
 braces = PT.braces lexer
+semi = PT.semi lexer
+commaSep = PT.commaSep lexer
 
 type Parser a = PP.Stream s m Char => PP.ParsecT s () m a
 
 testP p str = case PP.runParser p () "" str of Right x -> x
-
-semi :: Parser ()
-semi = void $ reservedOp ";"
 
 name :: Parser Name
 name = Name <$> ident
@@ -52,15 +50,14 @@ name = Name <$> ident
 (==>) :: String -> a -> Parser a
 str ==> a = reserved str >> return a
 
+defaultChoice :: (String, a) -> (String, a) -> Parser a
+defaultChoice (ds, da) (os, oa) = option da $ choice [ds ==> da, os ==> oa]
+
 visibility :: Parser Visibility
-visibility = option Private $ choice [public, private]
-	where public  = "public" ==> Public
-	      private = "private" ==> Private
+visibility = defaultChoice ("private", Private) ("public", Public)
 
 static :: Parser Static
-static = option Instance $ choice [stat, inst]
-	where stat = "static" ==> Static
-	      inst = "instance" ==> Instance
+static = option Instance ("static" ==> Static)
 
 namespace :: Parser Namespace
 namespace = do
@@ -92,9 +89,29 @@ classDeclInfo :: Parser ClassDeclInfo
 classDeclInfo = do
 	vis <- visibility
 	st <- static
+	(n, cv, e) <- classVar <|>  classProc
+	return $ ClassDeclInfo n vis st cv e
+
+classVar :: Parser (Name, ClassDecl, Expr)
+classVar = do
+	reserved "var"
 	n <- name
+	reservedOp "="
 	semi
-	return $ ClassDeclInfo n vis st ClassVar (Var "a")
+	return (n, ClassVar, Var "a")
+
+parameterList :: Parser [Param]
+parameterList = commaSep (Param <$> name)
+
+classProc :: Parser (Name, ClassDecl, Expr)
+classProc = do
+	n <- name
+	ps <- parens parameterList
+	semi
+	return (n, ClassProc ps, Var "a")
+
+
+
 
 
 
