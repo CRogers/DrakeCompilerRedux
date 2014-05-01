@@ -89,30 +89,45 @@ classDeclInfo :: Parser ClassDeclInfo
 classDeclInfo = do
 	vis <- visibility
 	st <- static
-	(n, cv, e) <- classVar <|>  classProc
-	return $ ClassDeclInfo n vis st cv e
+	(n, cv) <- classVar <|>  classProc
+	return $ ClassDeclInfo n vis st cv
 
-classVar :: Parser (Name, ClassDecl, Expr)
+classVar :: Parser (Name, ClassDecl)
 classVar = do
 	reserved "var"
 	n <- name
 	reservedOp "="
+	e <- expr
 	semi
-	return (n, ClassVar, Var "a")
+	return (n, ClassVar e)
 
 parameterList :: Parser [Param]
 parameterList = commaSep (Param <$> name)
 
-classProc :: Parser (Name, ClassDecl, Expr)
+stmt :: Parser Stmt
+stmt = rawExpr
+
+rawExpr :: Parser Stmt
+rawExpr = do
+	e <- expr
+	semi
+	return $ RawExpr e 
+
+block :: Parser [Stmt]
+block = braces $ many stmt
+
+classProc :: Parser (Name, ClassDecl)
 classProc = do
 	n <- name
 	ps <- parens parameterList
-	semi
-	return (n, ClassProc ps, Var "a")
+	stmts <- block
+	return (n, ClassProc ps stmts)
 
+expr :: Parser Expr
+expr = var
 
-
-
+var :: Parser Expr
+var = Var <$> ident
 
 
 

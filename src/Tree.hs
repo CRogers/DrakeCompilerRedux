@@ -22,12 +22,16 @@ data Static = Static | Instance deriving (Eq,Show)
 
 data Param = Param Name deriving (Eq,Show)
 
-data ClassDeclInfo = ClassDeclInfo Name Visibility Static ClassDecl Expr
+data ClassDeclInfo = ClassDeclInfo Name Visibility Static ClassDecl
 	deriving (Eq,Show)
 
 data ClassDecl
-	= ClassVar
-	| ClassProc [Param]
+	= ClassVar Expr
+	| ClassProc [Param] [Stmt]
+	deriving (Eq,Show)
+
+data Stmt
+	= RawExpr Expr
 	deriving (Eq,Show)
 
 data Expr
