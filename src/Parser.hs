@@ -1,4 +1,4 @@
-{-# LANGUAGE NoMonomorphismRestriction, Rank2Types, FlexibleContexts #-}
+{-# LANGUAGE NoMonomorphismRestriction, Rank2Types, FlexibleContexts, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-unused-do-bind #-}
 
 module Parser where
@@ -22,7 +22,7 @@ langDef = PT.LanguageDef {
 	PT.identLetter     = alphaNum <|> char '_',
 	PT.opStart         = operators,
 	PT.opLetter        = operators,
-	PT.reservedNames   = ["namespace", "class", "private", "public", "static", "var"],
+	PT.reservedNames   = ["namespace", "class", "private", "public", "static", "var", "if", "else", "return"],
 	PT.reservedOpNames = ["=", ";"],
 	PT.caseSensitive   = False
 }
@@ -105,13 +105,29 @@ parameterList :: Parser [Param]
 parameterList = commaSep (Param <$> name)
 
 stmt :: Parser Stmt
-stmt = rawExpr
+stmt = do
+	s <- choice [rawExpr, if_, return_]
+	semi
+	return s
 
 rawExpr :: Parser Stmt
-rawExpr = do
-	e <- expr
-	semi
-	return $ RawExpr e 
+rawExpr = RawExpr <$> expr 
+
+if_ :: Parser Stmt
+if_ = do
+	reserved "if"
+	cond <- expr
+	thenPart <- block
+	elsePart <- option [] else_
+	return $ If cond thenPart elsePart
+	where else_ = do
+		reserved "else"
+		block
+
+return_ :: Parser Stmt
+return_ = do
+	reserved "return"
+	Return <$> expr
 
 block :: Parser [Stmt]
 block = braces $ many stmt
@@ -124,10 +140,13 @@ classProc = do
 	return (n, ClassProc ps stmts)
 
 expr :: Parser Expr
-expr = var
+expr = choice [var, intLit]
 
 var :: Parser Expr
 var = Var <$> ident
+
+intLit :: Parser Expr
+intLit = IntLit <$> integer
 
 
 
