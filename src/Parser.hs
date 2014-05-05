@@ -42,7 +42,8 @@ commaSep = PT.commaSep lexer
 
 type Parser a = PP.Stream s m Char => PP.ParsecT s () m a
 
-testP p str = case PP.runParser p () "" str of Right x -> x
+testP p str = PP.runParser p () "" str
+testP' p str = case testP p str of Right x -> x
 
 name :: Parser Name
 name = Name <$> ident

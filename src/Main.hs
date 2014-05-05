@@ -5,6 +5,7 @@ module Main where
 import Parser
 import Desugar
 import Check
+import Test
 
 main :: IO ()
 main = putStrLn "hi"
