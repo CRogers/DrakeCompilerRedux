@@ -3,6 +3,7 @@
 
 module Main where
 
+import Control.Monad (liftM)
 import Control.Monad.Error
 import LLVM.General.Module
 import LLVM.General.Context
@@ -12,14 +13,15 @@ import Desugar
 import Check
 import Test
 import Gen
+import Builder
 
 failInIO :: forall c. ErrorT String IO c -> IO c
 failInIO = either fail return <=< runErrorT
 
+compile :: String -> IO String
+compile input = withContext (\cxt -> failInIO $ withModuleFromAST cxt m moduleLLVMAssembly)
+	where parsed = testP' classDeclInfo input
+	      m = genModule parsed
+
 main :: IO ()
-main = do
-	input <- getLine
-	let parsed = testP' classDeclInfo input
-	let m = genModule parsed
-	output <- withContext (\cxt -> failInIO $ withModuleFromAST cxt m moduleLLVMAssembly)
-	putStrLn output
+main = (putStrLn <=< compile) =<< getLine
