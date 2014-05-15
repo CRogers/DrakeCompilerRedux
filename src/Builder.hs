@@ -4,61 +4,72 @@ module Builder where
 
 import Control.Applicative (Applicative)
 import Control.Monad (void)
-import Control.Monad.State (MonadState, State, get, put, runState)
+import Control.Monad.State (MonadState, State, get, put, modify, runState)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import Data.Maybe (isJust)
 import Data.Word (Word)
 
 import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
 import qualified LLVM.General.AST.Global as LLG
 
-data FState = FState (Map LL.Name (Maybe (BasicBlockBuilder ()))) LL.Global
+data FState = FState (Map LL.Name (BasicBlockBuilder ())) BasicBlockRef LL.Global
 
 newtype FunctionBuilder a = FunctionBuilder (State FState a)
 	deriving (Functor, Monad, Applicative, MonadState FState)
 
-onlyJusts :: [(a, Maybe b)] -> [(a, b)]
-onlyJusts = map (\(a, Just b) -> (a, b)) . filter (isJust . snd)
+emptyBBB :: BasicBlockBuilder ()
+emptyBBB = return ()
 
 runFunctionBuilder :: FunctionBuilder a -> String -> LL.Global
 runFunctionBuilder (FunctionBuilder s) nameStr = f { LLG.name = name, LLG.returnType = LL.IntegerType 32, LLG.basicBlocks = bbs }
 	where name = LL.Name nameStr
-	      initialState = FState M.empty LLG.functionDefaults
-	      (FState bbbs f) = snd $ runState s initialState
+	      entry = LL.Name "entry"
+	      initialMap = M.fromList [(entry, emptyBBB)]
+	      initialState = FState initialMap (BasicBlockRef entry) LLG.functionDefaults
+	      (FState bbbs _ f) = snd $ runState s initialState
 	      g (c, bbList) (n, bbb) = let (c', bb) = runBasicBlockBuilder bbb n c in (c', bbList ++ [bb])
-	      bbs = snd $ foldl g (0, []) $ onlyJusts $ M.toList bbbs
+	      bbs = snd $ foldl g (0, []) $ M.toList bbbs
 
 setParameters :: [(LL.Type, String)] -> FunctionBuilder ()
 setParameters ps = do
-	(FState bbbs f) <- get
+	(FState bbbs cur f) <- get
 	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
 	let f' = f { LLG.parameters = (params, False) }
-	put $ FState bbbs f'
+	put $ FState bbbs cur f'
 
 newtype BasicBlockRef = BasicBlockRef LL.Name
 
 createBasicBlockRef :: String -> FunctionBuilder BasicBlockRef
 createBasicBlockRef n = do
 	let name = LL.Name n
-	(FState bbbs f) <- get
+	(FState bbbs cur f) <- get
 	if M.member name bbbs then error $ "Basic block " ++ n ++ " already exists"
 	else do
-		put $ FState (M.insert name Nothing bbbs) f
+		put $ FState (M.insert name emptyBBB bbbs) cur f
 		return $ BasicBlockRef name
 
 addToBasicBlock :: BasicBlockRef -> BasicBlockBuilder a -> FunctionBuilder ()
-addToBasicBlock (BasicBlockRef name) bbb' = do
-	(FState bbbs f) <- get
-	let bbb = void bbb'
+addToBasicBlock (BasicBlockRef name) bbb = do
+	(FState bbbs cur f) <- get
 	case M.lookup name bbbs of
 		Nothing -> error $ "No refernce for " ++ show name
-		Just (Just oldBBB) ->
+		Just oldBBB ->
 			let newBBB = void $ oldBBB >> bbb in
-			put $ FState (M.insert name (Just newBBB) bbbs) f
-		Just Nothing -> do
-			put $ FState (M.insert name (Just $ void bbb) bbbs) f
+			put $ FState (M.insert name newBBB bbbs) cur f
+
+switchTo :: BasicBlockRef -> FunctionBuilder ()
+switchTo ref = modify (\(FState bbbs _ f) -> FState bbbs ref f)
+
+getCurrent :: FunctionBuilder BasicBlockRef
+getCurrent = do
+	(FState _ cur _) <- get
+	return cur
+
+addToCurrent :: BasicBlockBuilder a -> FunctionBuilder ()
+addToCurrent bbb = do
+	ref <- getCurrent
+	addToBasicBlock ref bbb
 
 basicBlock :: String -> BasicBlockBuilder () -> FunctionBuilder ()
 basicBlock n bbb = createBasicBlockRef n >>= flip addToBasicBlock bbb
