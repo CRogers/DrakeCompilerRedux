@@ -7,13 +7,14 @@ import Control.Monad (void)
 import Control.Monad.State (MonadState, State, get, put, modify, runState)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import Data.Maybe (fromJust)
 import Data.Word (Word)
 
 import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
 import qualified LLVM.General.AST.Global as LLG
 
-data FState = FState (Map LL.Name (BasicBlockBuilder ())) BasicBlockRef LL.Global
+data FState = FState (Map LL.Name (BasicBlockBuilder ())) [LL.Name] BasicBlockRef LL.Global
 
 newtype FunctionBuilder a = FunctionBuilder (State FState a)
 	deriving (Functor, Monad, Applicative, MonadState FState)
@@ -26,44 +27,44 @@ runFunctionBuilder (FunctionBuilder s) nameStr = f { LLG.name = name, LLG.return
 	where name = LL.Name nameStr
 	      entry = LL.Name "entry"
 	      initialMap = M.fromList [(entry, emptyBBB)]
-	      initialState = FState initialMap (BasicBlockRef entry) LLG.functionDefaults
-	      (FState bbbs _ f) = snd $ runState s initialState
+	      initialState = FState initialMap [entry] (BasicBlockRef entry) LLG.functionDefaults
+	      (FState bbbs ord _ f) = snd $ runState s initialState
 	      g (c, bbList) (n, bbb) = let (c', bb) = runBasicBlockBuilder bbb n c in (c', bbList ++ [bb])
-	      bbs = snd $ foldl g (0, []) $ M.toList bbbs
+	      bbs = snd $ foldl g (0, []) $ map (\k -> (k, fromJust $ M.lookup k bbbs)) ord
 
 setParameters :: [(LL.Type, String)] -> FunctionBuilder ()
 setParameters ps = do
-	(FState bbbs cur f) <- get
+	(FState bbbs ord cur f) <- get
 	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
 	let f' = f { LLG.parameters = (params, False) }
-	put $ FState bbbs cur f'
+	put $ FState bbbs ord cur f'
 
 newtype BasicBlockRef = BasicBlockRef LL.Name
 
 createBasicBlockRef :: String -> FunctionBuilder BasicBlockRef
 createBasicBlockRef n = do
 	let name = LL.Name n
-	(FState bbbs cur f) <- get
+	(FState bbbs ord cur f) <- get
 	if M.member name bbbs then error $ "Basic block " ++ n ++ " already exists"
 	else do
-		put $ FState (M.insert name emptyBBB bbbs) cur f
+		put $ FState (M.insert name emptyBBB bbbs) (ord ++ [name]) cur f
 		return $ BasicBlockRef name
 
 addToBasicBlock :: BasicBlockRef -> BasicBlockBuilder a -> FunctionBuilder ()
 addToBasicBlock (BasicBlockRef name) bbb = do
-	(FState bbbs cur f) <- get
+	(FState bbbs ord cur f) <- get
 	case M.lookup name bbbs of
 		Nothing -> error $ "No refernce for " ++ show name
 		Just oldBBB ->
 			let newBBB = void $ oldBBB >> bbb in
-			put $ FState (M.insert name newBBB bbbs) cur f
+			put $ FState (M.insert name newBBB bbbs) ord cur f
 
 switchTo :: BasicBlockRef -> FunctionBuilder ()
-switchTo ref = modify (\(FState bbbs _ f) -> FState bbbs ref f)
+switchTo ref = modify (\(FState bbbs ord _ f) -> FState bbbs ord ref f)
 
 getCurrent :: FunctionBuilder BasicBlockRef
 getCurrent = do
-	(FState _ cur _) <- get
+	(FState _ _ cur _) <- get
 	return cur
 
 addToCurrent :: BasicBlockBuilder a -> FunctionBuilder ()
@@ -125,6 +126,9 @@ ret x = appendTerm $ LL.Ret (Just x) []
 br :: BasicBlockRef -> BasicBlockBuilder ()
 br (BasicBlockRef n) = appendTerm $ LL.Br n [] 
 
+condBr :: LL.Operand -> BasicBlockRef -> BasicBlockRef -> BasicBlockBuilder ()
+condBr cond (BasicBlockRef true) (BasicBlockRef false) = appendTerm $ LL.CondBr cond true false []
+ 
 c3 :: LL.Operand
 c3 = constant 3
 

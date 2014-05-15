@@ -41,4 +41,5 @@ data Stmt
 data Expr
 	= Var String
 	| IntLit Integer
+	| BoolLit Bool
 	deriving (Eq,Show)

@@ -22,7 +22,7 @@ langDef = PT.LanguageDef {
 	PT.identLetter     = alphaNum <|> char '_',
 	PT.opStart         = operators,
 	PT.opLetter        = operators,
-	PT.reservedNames   = ["namespace", "class", "private", "public", "static", "var", "if", "else", "return"],
+	PT.reservedNames   = ["namespace", "class", "private", "public", "static", "var", "if", "else", "return", "true", "false"],
 	PT.reservedOpNames = ["=", ";"],
 	PT.caseSensitive   = False
 }
@@ -90,7 +90,7 @@ classDeclInfo :: Parser ClassDeclInfo
 classDeclInfo = do
 	vis <- visibility
 	st <- static
-	(n, cv) <- classVar <|>  classProc
+	(n, cv) <- classVar <|> classProc
 	return $ ClassDeclInfo n vis st cv
 
 classVar :: Parser (Name, ClassDecl)
@@ -141,7 +141,7 @@ classProc = do
 	return (n, ClassProc ps stmts)
 
 expr :: Parser Expr
-expr = choice [var, intLit]
+expr = choice [var, intLit, boolLit]
 
 var :: Parser Expr
 var = Var <$> ident
@@ -149,6 +149,8 @@ var = Var <$> ident
 intLit :: Parser Expr
 intLit = IntLit <$> integer
 
+boolLit :: Parser Expr
+boolLit = BoolLit <$> choice ["true" ==> True, "false" ==> False]
 
 
 
