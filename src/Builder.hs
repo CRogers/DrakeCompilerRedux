@@ -3,7 +3,7 @@
 module Builder (FunctionBuilder, BasicBlockRef, createBasicBlockRef, buildBasicBlock, add) where
 
 import Control.Applicative (Applicative)
-import Control.Monad.State (MonadState, State, get, put, runState, state)
+import Control.Monad.State (MonadState, State, get, put, runState)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
@@ -54,8 +54,8 @@ ftest = do
 	hat <- createBasicBlockRef "hat"
 	buildBasicBlock cat $ do
 		a <- add c3 c3
-		b <- add c3 a
-		ret b
+		add c3 a
+		br hat
 	buildBasicBlock hat $ do
 		a <- add c3 c3
 		ret a
@@ -91,6 +91,9 @@ add x y = appendInstr $ LL.Add False False x y []
 
 ret :: LL.Operand -> BasicBlockBuilder ()
 ret x = appendTerm $ LL.Ret (Just x) []
+
+br :: BasicBlockRef -> BasicBlockBuilder ()
+br (BasicBlockRef n) = appendTerm $ LL.Br n [] 
 
 c3 :: LL.Operand
 c3 = (LL.ConstantOperand (LLC.Int 32 3))
