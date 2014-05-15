@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, TupleSections #-}
 
-module Builder (FunctionBuilder, BasicBlockRef, createBasicBlockRef, buildBasicBlock, add) where
+module Builder where
 
 import Control.Applicative (Applicative)
 import Control.Monad.State (MonadState, State, get, put, runState)
@@ -81,6 +81,9 @@ appendInstr instr = do
 	put $ BState (is ++ [i]) t (c + 1)
 	return $ LL.LocalReference n
 
+constant :: Integer -> LL.Operand
+constant i = LL.ConstantOperand $ LLC.Int 32 i
+
 appendTerm :: LL.Terminator -> BasicBlockBuilder ()
 appendTerm t = do
 	(BState is _ c) <- get
@@ -96,7 +99,7 @@ br :: BasicBlockRef -> BasicBlockBuilder ()
 br (BasicBlockRef n) = appendTerm $ LL.Br n [] 
 
 c3 :: LL.Operand
-c3 = (LL.ConstantOperand (LLC.Int 32 3))
+c3 = constant 3
 
 test :: BasicBlockBuilder ()
 test = do
