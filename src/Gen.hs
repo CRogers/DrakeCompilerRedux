@@ -15,7 +15,8 @@ genClassInfo :: ClassDeclInfo -> LL.Global
 genClassInfo (ClassDeclInfo (Name n) _ _ cdecl) = runFunctionBuilder (genClassDecl cdecl) n
 
 genClassDecl :: ClassDecl -> FunctionBuilder ()
-genClassDecl (ClassProc _ [stmt]) = do
+genClassDecl (ClassProc ps [stmt]) = do
+	setParameters $ zip (repeat i32) (map (\(Param (Name n)) -> n) ps)
 	entry <- createBasicBlockRef "entry"
 	buildBasicBlock entry $ genStmt stmt
 

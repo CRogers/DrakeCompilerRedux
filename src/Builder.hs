@@ -13,39 +13,46 @@ import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
 import qualified LLVM.General.AST.Global as LLG
 
-data FState = FState (Map LL.Name (Maybe LL.BasicBlock)) Word
+data FState = FState (Map LL.Name (Maybe LL.BasicBlock)) Word LL.Global
 	deriving Show
 
 newtype FunctionBuilder a = FunctionBuilder (State FState a)
 	deriving (Functor, Monad, Applicative, MonadState FState)
 
 runFunctionBuilder :: FunctionBuilder a -> String -> LL.Global
-runFunctionBuilder (FunctionBuilder s) n = LL.functionDefaults { LLG.name = name, LLG.returnType = LL.IntegerType 32, LLG.basicBlocks = bbList }
+runFunctionBuilder (FunctionBuilder s) n = f { LLG.name = name, LLG.returnType = LL.IntegerType 32, LLG.basicBlocks = bbList }
 	where name = LL.Name n
-	      initialState = FState M.empty 0
-	      (FState bbs _) = snd $ runState s initialState
+	      initialState = FState M.empty 0 LLG.functionDefaults
+	      (FState bbs _ f) = snd $ runState s initialState
 	      bbList = catMaybes $ map snd $ M.toList bbs
+
+setParameters :: [(LL.Type, String)] -> FunctionBuilder ()
+setParameters ps = do
+	(FState bbs c f) <- get
+	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
+	let f' = f { LLG.parameters = (params, False) }
+	put $ FState bbs c f'
 
 newtype BasicBlockRef = BasicBlockRef LL.Name
 
 createBasicBlockRef :: String -> FunctionBuilder BasicBlockRef
 createBasicBlockRef n = do
 	let name = LL.Name n
-	(FState bbs c) <- get
+	(FState bbs c f) <- get
 	if M.member name bbs then error $ "Basic block " ++ n ++ " already exists"
 	else do
-		put $ FState (M.insert name Nothing bbs) c
+		put $ FState (M.insert name Nothing bbs) c f
 		return $ BasicBlockRef name
 
 buildBasicBlock :: BasicBlockRef -> BasicBlockBuilder () -> FunctionBuilder ()
 buildBasicBlock (BasicBlockRef name) bbb = do
-	(FState bbs c) <- get
+	(FState bbs c f) <- get
 	case M.lookup name bbs of
 		Nothing -> error $ "No refernce for " ++ show name
 		Just (Just _) -> error $ "Already build basic block for " ++ show name
 		Just Nothing -> do
 			let (c', bb) = runBasicBlockBuilder bbb name c
-			put $ FState (M.insert name (Just bb) bbs) c'
+			put $ FState (M.insert name (Just bb) bbs) c' f
 
 
 ftest :: FunctionBuilder ()
