@@ -54,6 +54,8 @@ buildBasicBlock (BasicBlockRef name) bbb = do
 			let (c', bb) = runBasicBlockBuilder bbb name c
 			put $ FState (M.insert name (Just bb) bbs) c' f
 
+basicBlock :: String -> BasicBlockBuilder () -> FunctionBuilder ()
+basicBlock n bbb = createBasicBlockRef n >>= flip buildBasicBlock bbb
 
 ftest :: FunctionBuilder ()
 ftest = do
