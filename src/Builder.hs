@@ -32,12 +32,13 @@ runFunctionBuilder (FunctionBuilder s) nameStr = f { LLG.name = name, LLG.return
 	      g (c, bbList) (n, bbb) = let (c', bb) = runBasicBlockBuilder bbb n c in (c', bbList ++ [bb])
 	      bbs = snd $ foldl g (0, []) $ map (\k -> (k, fromJust $ M.lookup k bbbs)) ord
 
-setParameters :: [(LL.Type, String)] -> FunctionBuilder ()
+setParameters :: [(LL.Type, String)] -> FunctionBuilder [LL.Operand]
 setParameters ps = do
 	(FState bbbs ord cur f) <- get
 	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
 	let f' = f { LLG.parameters = (params, False) }
 	put $ FState bbbs ord cur f'
+	return $ map (LL.LocalReference . LL.Name . snd) ps
 
 newtype BasicBlockRef = BasicBlockRef LL.Name
 
