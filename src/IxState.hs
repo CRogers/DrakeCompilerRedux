@@ -1,8 +1,10 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
 
 module IxState where
 
+import Control.Applicative (Applicative(..))
 import Control.Monad.Indexed (IxApplicative(..),IxFunctor(..),IxPointed(..),IxMonad(..),(>>>=))
+import Control.Monad.State.Class (MonadState(..))
 
 newtype IxState i o a = IxState { runIxState :: i -> (a, o) }
 
@@ -30,3 +32,18 @@ instance IxMonadState IxState where
 
 imodify :: IxMonadState m => (s -> t) -> m s t ()
 imodify f = iget >>>= (\s -> iput $ f s)
+
+instance Functor (IxState i j) where
+	fmap = imap
+
+instance Applicative (IxState i i) where
+	pure = ireturn
+	(<*>) = iap
+
+instance Monad (IxState i i) where
+	return = ireturn
+	m >>= k = ibind k m
+
+instance MonadState i (IxState i i) where
+	get = iget
+	put = iput

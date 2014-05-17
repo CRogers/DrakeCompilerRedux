@@ -1,11 +1,15 @@
-{-# LANGUAGE RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections #-}
+{-# LANGUAGE StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
 
 module Builder where
 
 import Prelude hiding (Monad(..))
+import qualified Prelude as Prelude
 import IxMonadSyntax
 
+import Control.Lens
 import Control.Monad.Indexed
+import Control.Monad.State.Class (MonadState(..))
+import Data.Char (toUpper)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromJust)
@@ -17,49 +21,82 @@ import qualified LLVM.General.AST.Global as LLG
 
 import IxState
 
-newtype BState = BState {
-	instrs :: [LL.Named LL.Instruction]
-}
+makeLensesWith (lensRules & lensField .~ (\s -> Just $ "glob" ++ map toUpper (take 1 s) ++ drop 1 s)) ''LL.Global
 
-data Term = Term 
+newtype BState = BState {
+	_instrs :: [LL.Named LL.Instruction]
+} deriving Show
+makeLenses ''BState
+
+emptyBState :: BState
+emptyBState = BState []
+
+data Terminated' = Terminated' deriving Show
+
+type BBMap = Map LL.Name (Maybe LL.BasicBlock)
 
 data FState a = FState {
-	basicBlocks :: Map LL.Name (Maybe LL.BasicBlock),
-	basicBlockOrder :: [LL.Name],
-	refCount :: Word,
-	function :: LL.Global,
-	innerState :: a
-}
+	_basicBlocks :: BBMap,
+	_basicBlockOrder :: [LL.Name],
+	_refCount :: Word,
+	_function :: LL.Global,
+	_innerState :: a
+} deriving Show
+makeLenses ''FState
 
 type BasicBlock = FState BState
-type Terminated = FState Term 
+type Terminated = FState Terminated'
+
+type Block a = CFB BasicBlock a
+type Term a = CFB Terminated a
+type Any a b = CFB (FState a) b
 
 newtype FunctionBuilder i o a = FunctionBuilder (IxState i o a)
 	deriving (IxFunctor, IxApplicative, IxPointed, IxMonad, IxMonadState)
 
-type CFB s a = FunctionBuilder s s a 
+deriving instance Prelude.Monad (FunctionBuilder i i)
+deriving instance MonadState i (FunctionBuilder i i)
 
-getAndIncrementCount :: CFB s Word
-getAndIncrementCount = do
-	fs <- iget
-	let c = refCount fs
-	iput $ fs { refCount = c + 1 }
-	return c
+type CFB s a = FunctionBuilder s s a
 
-zoomBState :: IxState BState BState a -> CFB BasicBlock a
-zoomBState s = do
-	(FState bbs ord c f bs) <- iget
-	let (a, bs') = runIxState s bs
-	iput (FState bbs ord c f bs')
-	return a
+newtype BasicBlockRef = BasicBlockRef LL.Name
 
-appendTerm :: LL.Terminator -> CFB BasicBlock BasicBlock ()
-appendTerm t = do
-	c <- getAndIncrementCount
-	zoomBState $ do
-		imodify $ \bs -> fmap (++ ) bs
-	(BState is _ c) <- get
-	put $ BState is (Just $ LL.Do t) c
+(.==) :: IxMonadState m => ASetter s t a b -> b -> m s t ()
+l .== b = imodify (l .~ b)   
+
+(%==) :: (Profunctor p, IxMonadState m) => Setting p s t a b -> p a b -> m s t ()
+l %== b = imodify (l %~ b)
+
+use' :: IxMonadState m => Getting a s a -> m s s a
+use' l = do
+	x <- iget
+	return $ x ^. l
+
+getAndIncrementCount :: CFB (FState a) Word
+getAndIncrementCount = refCount <<+= 1
+
+setParameters :: [(LL.Type, String)] -> Term [LL.Operand]
+setParameters ps = do
+	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
+	function . globParameters .= (params, False)
+	return $ map (LL.LocalReference . LL.Name . snd) ps
+
+createBasicBlockRef :: String -> Any a BasicBlockRef
+createBasicBlockRef n = do
+	let name = LL.Name n
+	bbs <- use' basicBlocks
+	if M.member name bbs then error $ "Basic block " ++ n ++ " already exists"
+	else do
+		basicBlocks %== M.insert name Nothing
+		basicBlockOrder %== (name :) 
+		return $ BasicBlockRef name
+
+switchTo :: BasicBlockRef -> FunctionBuilder Terminated BasicBlock ()
+switchTo (BasicBlockRef n) = do
+	bbs <- use' basicBlocks
+	case M.lookup n bbs of
+		Just _ -> error $ "Already switched to " ++ show n
+		Nothing -> innerState .== emptyBState
 
 {-
 emptyBBB :: BasicBlockBuilder ()
@@ -82,8 +119,6 @@ setParameters ps = do
 	let f' = f { LLG.parameters = (params, False) }
 	put $ FState bbbs ord cur f'
 	return $ map (LL.LocalReference . LL.Name . snd) ps
-
-newtype BasicBlockRef = BasicBlockRef LL.Name
 
 createBasicBlockRef :: String -> FunctionBuilder BasicBlockRef
 createBasicBlockRef n = do

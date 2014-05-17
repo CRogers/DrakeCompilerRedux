@@ -2,7 +2,7 @@
 
 module IxMonadSyntax where
 
-import Prelude (error, String)
+import Prelude (error, String, Bool)
 import Control.Monad.Indexed ((>>>=),IxPointed(..),IxMonad)
 
 (>>=) :: IxMonad m => m i j a -> (a -> m j k b) -> m i k b
@@ -16,3 +16,6 @@ return = ireturn
 
 fail :: IxMonad m => String -> m i i a
 fail = error
+
+ifThenElse :: Bool -> t -> t -> t
+ifThenElse cond x y = if cond then x else y
