@@ -1,10 +1,11 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, TupleSections #-}
+{-# LANGUAGE RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections #-}
 
 module Builder where
 
-import Control.Applicative (Applicative)
-import Control.Monad (void)
-import Control.Monad.State (MonadState, State, get, put, modify, runState)
+import Prelude hiding (Monad(..))
+import IxMonadSyntax
+
+import Control.Monad.Indexed
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromJust)
@@ -14,11 +15,53 @@ import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
 import qualified LLVM.General.AST.Global as LLG
 
-data FState = FState (Map LL.Name (BasicBlockBuilder ())) [LL.Name] BasicBlockRef LL.Global
+import IxState
 
-newtype FunctionBuilder a = FunctionBuilder (State FState a)
-	deriving (Functor, Monad, Applicative, MonadState FState)
+newtype BState = BState {
+	instrs :: [LL.Named LL.Instruction]
+}
 
+data Term = Term 
+
+data FState a = FState {
+	basicBlocks :: Map LL.Name (Maybe LL.BasicBlock),
+	basicBlockOrder :: [LL.Name],
+	refCount :: Word,
+	function :: LL.Global,
+	innerState :: a
+}
+
+type BasicBlock = FState BState
+type Terminated = FState Term 
+
+newtype FunctionBuilder i o a = FunctionBuilder (IxState i o a)
+	deriving (IxFunctor, IxApplicative, IxPointed, IxMonad, IxMonadState)
+
+type CFB s a = FunctionBuilder s s a 
+
+getAndIncrementCount :: CFB s Word
+getAndIncrementCount = do
+	fs <- iget
+	let c = refCount fs
+	iput $ fs { refCount = c + 1 }
+	return c
+
+zoomBState :: IxState BState BState a -> CFB BasicBlock a
+zoomBState s = do
+	(FState bbs ord c f bs) <- iget
+	let (a, bs') = runIxState s bs
+	iput (FState bbs ord c f bs')
+	return a
+
+appendTerm :: LL.Terminator -> CFB BasicBlock BasicBlock ()
+appendTerm t = do
+	c <- getAndIncrementCount
+	zoomBState $ do
+		imodify $ \bs -> fmap (++ ) bs
+	(BState is _ c) <- get
+	put $ BState is (Just $ LL.Do t) c
+
+{-
 emptyBBB :: BasicBlockBuilder ()
 emptyBBB = return ()
 
@@ -89,13 +132,6 @@ ftest = do
 	addToBasicBlock cat $ do
 		ret c3
 
-
-data BState = BState [LL.Named LL.Instruction] (Maybe (LL.Named LL.Terminator)) Word
-	deriving (Show)
-
-newtype BasicBlockBuilder a = BasicBlockBuilder (State BState a)
-	deriving (Functor, Monad, Applicative, MonadState BState)
-
 runBasicBlockBuilder :: BasicBlockBuilder a -> LL.Name -> Word -> (Word, LL.BasicBlock)
 runBasicBlockBuilder (BasicBlockBuilder s) n i = (finalCount, bb)
 	where initialState = BState [] Nothing i
@@ -139,3 +175,4 @@ test = do
 	x <- add b b
 	y <- add b x
 	ret y
+-}

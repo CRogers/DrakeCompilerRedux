@@ -2,7 +2,7 @@
 
 module IxState where
 
-import Control.Monad.Indexed (IxApplicative(..),IxFunctor(..),IxPointed(..),IxMonad(..))
+import Control.Monad.Indexed (IxApplicative(..),IxFunctor(..),IxPointed(..),IxMonad(..),(>>>=))
 
 newtype IxState i o a = IxState { runIxState :: i -> (a, o) }
 
@@ -20,8 +20,13 @@ instance IxApplicative IxState where
 instance IxMonad IxState where
 	ibind f mx = IxState $ \i -> let (a, j) = runIxState mx i in runIxState (f a) j
 
-iget :: IxState i i i
-iget = IxState $ \i -> (i, i)
+class IxMonad m => IxMonadState m where
+	iget :: m i i i
+	iput :: s -> m i s ()
 
-iput :: a -> IxState i i a
-iput a = IxState (a,)
+instance IxMonadState IxState where
+	iget = IxState $ \i -> (i, i)
+	iput s = IxState $ \_ -> ((),s)
+
+imodify :: IxMonadState m => (s -> t) -> m s t ()
+imodify f = iget >>>= (\s -> iput $ f s)
