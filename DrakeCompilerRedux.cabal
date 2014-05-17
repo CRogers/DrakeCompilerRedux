@@ -21,7 +21,7 @@ executable DrakeCompilerRedux
   -- other-extensions:    
   build-depends:       base >=4.7 && <5
                      , containers
-                     , compdata
+                     , indexed
                      , parsec
                      , mtl
                      , HUnit

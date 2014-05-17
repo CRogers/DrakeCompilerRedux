@@ -14,6 +14,7 @@ import Check
 import Test
 import Gen
 import Builder
+import IxState
 
 failInIO :: forall c. ErrorT String IO c -> IO c
 failInIO = either fail return <=< runErrorT
