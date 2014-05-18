@@ -1,4 +1,4 @@
-{-# LANGUAGE StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE DataKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
 
 module Builder where
 
@@ -13,6 +13,7 @@ import Data.Char (toUpper)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
+import Data.Void (Void)
 import Data.Word (Word)
 
 import qualified LLVM.General.AST as LL
@@ -23,13 +24,14 @@ import IxState
 
 makeLensesWith (lensRules & lensField .~ (\s -> Just $ "glob" ++ map toUpper (take 1 s) ++ drop 1 s)) ''LL.Global
 
-data BState = BState {
+data BasicBlock = BasicBlock {
 	_instrs :: [LL.Named LL.Instruction],
 	_currentBlock :: LL.Name
 } deriving Show
-makeLenses ''BState
+makeLenses ''BasicBlock
 
-data Terminated' = Terminated' deriving Show
+data Terminated = Terminated deriving Show
+data Setup = Setup deriving Show
 
 data FState a = FState {
 	_basicBlocks :: Map LL.Name (Maybe LL.BasicBlock),
@@ -40,17 +42,14 @@ data FState a = FState {
 } deriving Show
 makeLenses ''FState
 
-type BasicBlock = FState BState
-type Terminated = FState Terminated'
-
-newtype Builder i o a = Builder { unBuilder :: IxState i o a }
+newtype Builder' i o a = Builder { unBuilder :: IxState i o a }
 	deriving (Functor, IxFunctor, IxApplicative, IxPointed, IxMonad, IxMonadState)
 
-deriving instance Prelude.Monad (Builder i i)
-deriving instance MonadState i (Builder i i)
+deriving instance Prelude.Monad (Builder' i i)
+deriving instance MonadState i (Builder' i i)
 
+type Builder i o a = Builder' (FState i) (FState o) a
 type CBuilder s a = Builder s s a
-type ABuilder a b = CBuilder (FState a) b 
 
 newtype BasicBlockRef = BasicBlockRef { _unBasicBlockRef :: LL.Name } deriving (Eq, Show)
 makeLenses ''BasicBlockRef
@@ -77,9 +76,9 @@ ixuse l = do
 	x <- iget
 	return $ x ^. l
 
-runBuilder :: CBuilder Terminated a -> String -> LL.Global
+runBuilder :: Builder Setup Terminated () -> String -> LL.Global
 runBuilder (Builder s) nameStr =
-	let initialState = FState M.empty [] 0 LLG.functionDefaults Terminated' in
+	let initialState = FState M.empty [] 0 LLG.functionDefaults Setup in
 	let fstate = snd $ runIxState s initialState in
 	let f = fstate ^. function in
 	let basicBlockNames = reverse $ fstate ^. basicBlockOrder in
@@ -88,21 +87,21 @@ runBuilder (Builder s) nameStr =
 	  & globReturnType .~ LL.IntegerType 32
 	  & globBasicBlocks .~ bblocks
 
-getAndIncrementCount :: ABuilder a Word
+getAndIncrementCount :: CBuilder a Word
 getAndIncrementCount = refCount <<+= 1
 
-getNextUnName :: ABuilder a LL.Name
+getNextUnName :: CBuilder a LL.Name
 getNextUnName = do
 	c <- getAndIncrementCount
 	return $ LL.UnName c
 
-setParameters :: [(LL.Type, String)] -> ABuilder a [ValueRef]
+setParameters :: [(LL.Type, String)] -> CBuilder Setup [ValueRef]
 setParameters ps = do
 	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
 	function.globParameters .= (params, False)
 	return $ map (vrFromString . snd) ps
 
-createBasicBlock :: String -> ABuilder a BasicBlockRef
+createBasicBlock :: String -> CBuilder a BasicBlockRef
 createBasicBlock n = do
 	c <- getAndIncrementCount
 	let name = LL.Name $ n ++ "." ++ show c
@@ -113,12 +112,16 @@ createBasicBlock n = do
 		basicBlockOrder %== (name :)
 		return $ BasicBlockRef name
 
-switchTo :: BasicBlockRef -> Builder Terminated BasicBlock ()
+type family SetupOrTerminated a where
+	SetupOrTerminated Setup = True
+	SetupOrTerminated Terminated = True
+
+switchTo :: (SetupOrTerminated a ~ True) => BasicBlockRef -> Builder a BasicBlock ()
 switchTo (BasicBlockRef n) = do
 	bbs <- ixuse basicBlocks
 	case M.lookup n bbs of
 		Just (Just _) -> error $ "Already switched to " ++ show n
-		Just Nothing -> innerState .== BState [] n
+		Just Nothing -> innerState .== BasicBlock [] n
 		Nothing -> error "wtf?"
 
 appendInstr :: LL.Instruction -> CBuilder BasicBlock ValueRef
@@ -138,7 +141,7 @@ appendTerm t = do
 	n <- getNextUnName
 	let bb = LL.BasicBlock curBlock is (n LL.:= t) 
 	basicBlocks %== M.insert curBlock (Just bb)
-	innerState .== Terminated'
+	innerState .== Terminated
 
 ret :: ValueRef -> Builder BasicBlock Terminated ()
 ret (ValueRef x) = appendTerm $ LL.Ret (Just x) []

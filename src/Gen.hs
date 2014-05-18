@@ -1,4 +1,4 @@
-{-# LANGUAGE RebindableSyntax #-}
+{-# LANGUAGE RebindableSyntax, DataKinds, TypeFamilies #-}
 
 module Gen where
 
@@ -26,16 +26,16 @@ genModule cdi = LL.Module "test" Nothing Nothing [LL.GlobalDefinition $ genClass
 genClassInfo :: ClassDeclInfo -> LL.Global
 genClassInfo (ClassDeclInfo (Name n) _ _ cdecl) = runBuilder (genClassDecl cdecl) n
 
-genClassDecl :: ClassDecl -> CBuilder Terminated ()
+genClassDecl :: ClassDecl -> Builder Setup Terminated ()
 genClassDecl (ClassProc ps stmts) = do
 	setParameters $ zip (repeat i32) (map (\(Param (Name n)) -> n) ps)
 	entry <- createBasicBlock "entry"
 	genBlock_ stmts entry $ ret c3
 
-genBlock :: Block -> BasicBlockRef -> BasicBlockRef -> CBuilder Terminated ()
+genBlock :: (SetupOrTerminated a ~ True) => Block -> BasicBlockRef -> BasicBlockRef -> Builder a Terminated ()
 genBlock stmts entry exit = genBlock_ stmts entry $ br exit
 
-genBlock_ :: Block -> BasicBlockRef -> Builder BasicBlock Terminated () -> CBuilder Terminated ()
+genBlock_ :: (SetupOrTerminated a ~ True) => Block -> BasicBlockRef -> Builder BasicBlock Terminated () -> Builder a Terminated ()
 genBlock_ (Block stmts rs) entry exit = do
 	switchTo entry
 	mapM_ genStmt stmts
