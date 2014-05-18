@@ -30,13 +30,13 @@ genClassDecl :: ClassDecl -> CBuilder Terminated ()
 genClassDecl (ClassProc ps stmts) = do
 	setParameters $ zip (repeat i32) (map (\(Param (Name n)) -> n) ps)
 	entry <- createBasicBlock "entry"
-	genBlock stmts entry $ ret c3
+	genBlock_ stmts entry $ ret c3
 
-genBlock_ :: Block -> BasicBlockRef -> BasicBlockRef -> CBuilder Terminated ()
-genBlock_ stmts entry exit = genBlock stmts entry $ br exit
+genBlock :: Block -> BasicBlockRef -> BasicBlockRef -> CBuilder Terminated ()
+genBlock stmts entry exit = genBlock_ stmts entry $ br exit
 
-genBlock :: Block -> BasicBlockRef -> Builder BasicBlock Terminated () -> CBuilder Terminated ()
-genBlock stmts entry exit = do
+genBlock_ :: Block -> BasicBlockRef -> Builder BasicBlock Terminated () -> CBuilder Terminated ()
+genBlock_ stmts entry exit = do
 	switchTo entry
 	genBlock' stmts
 	where genBlock' [] = exit
@@ -51,8 +51,8 @@ genStmt (If cond then_ else_) = do
 	cond' <- genExpr cond
 	condBr cond' thenBB elseBB
 	
-	genBlock_ then_ thenBB afterBB
-	genBlock_ else_ elseBB afterBB
+	genBlock then_ thenBB afterBB
+	genBlock else_ elseBB afterBB
 
 	switchTo afterBB
 
