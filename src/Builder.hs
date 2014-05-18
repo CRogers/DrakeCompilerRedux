@@ -100,6 +100,13 @@ setParameters ps = do
 	function.globParameters .= (params, False)
 	return $ map (vrFromString . snd) ps
 
+getParameter :: Int -> CBuilder BasicBlock ValueRef
+getParameter i = do
+	f <- ixuse function
+	let ps = LLG.parameters f
+	let (LLG.Parameter _ n _) = fst ps !! i
+	return $ vrFromName n
+
 createBasicBlock :: String -> CBuilder a BasicBlockRef
 createBasicBlock n = do
 	c <- getAndIncrementCount
