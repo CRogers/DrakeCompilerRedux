@@ -140,7 +140,7 @@ appendTerm t = do
 	is <- ixuse $ innerState.instrs
 	curBlock <- ixuse $ innerState.currentBlock
 	n <- getNextUnName
-	let bb = LL.BasicBlock curBlock is (n LL.:= t) 
+	let bb = LL.BasicBlock curBlock (reverse is) (n LL.:= t)
 	basicBlocks %== M.insert curBlock (Just bb)
 	innerState .== Terminated
 
