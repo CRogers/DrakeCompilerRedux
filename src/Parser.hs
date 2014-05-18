@@ -22,7 +22,7 @@ langDef = PT.LanguageDef {
 	PT.identLetter     = alphaNum <|> char '_',
 	PT.opStart         = operators,
 	PT.opLetter        = operators,
-	PT.reservedNames   = ["namespace", "class", "private", "public", "static", "var", "if", "else", "return", "true", "false"],
+	PT.reservedNames   = ["namespace", "class", "private", "public", "static", "let", "if", "else", "return", "true", "false"],
 	PT.reservedOpNames = ["=", ";"],
 	PT.caseSensitive   = False
 }
@@ -107,12 +107,20 @@ parameterList = commaSep (Param <$> name)
 
 stmt :: Parser Stmt
 stmt = do
-	s <- choice [rawExpr, if_]
+	s <- choice [rawExpr, assign, if_]
 	semi
 	return s
 
 rawExpr :: Parser Stmt
-rawExpr = RawExpr <$> expr 
+rawExpr = RawExpr <$> expr
+
+assign :: Parser Stmt
+assign = do
+	reserved "let"
+	n <- varName
+	symbol "="
+	e <- expr
+	return $ Assign n e
 
 if_ :: Parser Stmt
 if_ = do
@@ -143,8 +151,11 @@ classProc = do
 expr :: Parser Expr
 expr = choice [var, intLit, boolLit]
 
+varName :: Parser VarName
+varName = VarName <$> ident
+
 var :: Parser Expr
-var = Var <$> ident
+var = Var <$> varName
 
 intLit :: Parser Expr
 intLit = IntLit <$> integer

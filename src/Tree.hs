@@ -5,6 +5,7 @@ module Tree where
 import Data.Monoid (Monoid)
 
 newtype Name = Name String deriving (Eq,Show,Monoid)
+newtype VarName = VarName String deriving (Eq,Show,Monoid)
 
 data Namespace = Namespace Name [DeclInfo]
 	deriving (Eq,Show)
@@ -35,6 +36,7 @@ data ClassDecl
 
 data Stmt
 	= RawExpr Expr
+	| Assign VarName Expr
 	| If Expr Block Block
 	deriving (Eq,Show)
 
@@ -42,7 +44,7 @@ data ReturnStmt = Return Expr
 	deriving (Eq,Show)
 
 data Expr
-	= Var String
+	= Var VarName
 	| IntLit Integer
 	| BoolLit Bool
 	deriving (Eq,Show)
