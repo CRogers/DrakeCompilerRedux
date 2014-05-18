@@ -32,10 +32,10 @@ genClassDecl (ClassProc ps stmts) = do
 	entry <- createBasicBlock "entry"
 	genBlock_ stmts entry $ ret c3
 
-genBlock :: (SetupOrTerminated a ~ True) => Block -> BasicBlockRef -> BasicBlockRef -> Builder a Terminated ()
+genBlock :: IsSetupOrTerminated a => Block -> BasicBlockRef -> BasicBlockRef -> Builder a Terminated ()
 genBlock stmts entry exit = genBlock_ stmts entry $ br exit
 
-genBlock_ :: (SetupOrTerminated a ~ True) => Block -> BasicBlockRef -> Builder BasicBlock Terminated () -> Builder a Terminated ()
+genBlock_ :: IsSetupOrTerminated a => Block -> BasicBlockRef -> Builder BasicBlock Terminated () -> Builder a Terminated ()
 genBlock_ (Block stmts rs) entry exit = do
 	switchTo entry
 	mapM_ genStmt stmts

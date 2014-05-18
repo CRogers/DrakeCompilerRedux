@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, DataKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
 
 module Builder where
 
@@ -13,7 +13,6 @@ import Data.Char (toUpper)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
-import Data.Void (Void)
 import Data.Word (Word)
 
 import qualified LLVM.General.AST as LL
@@ -116,7 +115,9 @@ type family SetupOrTerminated a where
 	SetupOrTerminated Setup = True
 	SetupOrTerminated Terminated = True
 
-switchTo :: (SetupOrTerminated a ~ True) => BasicBlockRef -> Builder a BasicBlock ()
+type IsSetupOrTerminated a = SetupOrTerminated a ~ True
+
+switchTo :: IsSetupOrTerminated a => BasicBlockRef -> Builder a BasicBlock ()
 switchTo (BasicBlockRef n) = do
 	bbs <- ixuse basicBlocks
 	case M.lookup n bbs of
