@@ -10,7 +10,6 @@ import LLVM.General.Context
 
 import Parser
 import Desugar
-import Check
 import Test
 import Gen
 import Builder

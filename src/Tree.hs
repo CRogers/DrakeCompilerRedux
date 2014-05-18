@@ -25,7 +25,8 @@ data Param = Param Name deriving (Eq,Show)
 data ClassDeclInfo = ClassDeclInfo Name Visibility Static ClassDecl
 	deriving (Eq,Show)
 
-type Block = [Stmt]
+data Block = Block [Stmt] (Maybe ReturnStmt)
+	deriving (Eq,Show)
 
 data ClassDecl
 	= ClassVar Expr
@@ -35,7 +36,9 @@ data ClassDecl
 data Stmt
 	= RawExpr Expr
 	| If Expr Block Block
-	| Return Expr
+	deriving (Eq,Show)
+
+data ReturnStmt = Return Expr
 	deriving (Eq,Show)
 
 data Expr

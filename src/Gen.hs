@@ -36,12 +36,12 @@ genBlock :: Block -> BasicBlockRef -> BasicBlockRef -> CBuilder Terminated ()
 genBlock stmts entry exit = genBlock_ stmts entry $ br exit
 
 genBlock_ :: Block -> BasicBlockRef -> Builder BasicBlock Terminated () -> CBuilder Terminated ()
-genBlock_ stmts entry exit = do
+genBlock_ (Block stmts rs) entry exit = do
 	switchTo entry
-	genBlock' stmts
-	where genBlock' [] = exit
-	      genBlock' [Return e] = ret =<<< genExpr e
-	      genBlock' (s:ss) = genStmt s >> genBlock' ss 
+	mapM_ genStmt stmts
+	case rs of
+		Nothing -> exit
+		Just (Return e) -> ret =<<< genExpr e
 
 genStmt :: Stmt -> CBuilder BasicBlock ()
 genStmt (RawExpr e) = void $ genExpr e

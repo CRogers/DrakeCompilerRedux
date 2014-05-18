@@ -3,7 +3,7 @@
 
 module Parser where
 
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>),(<*>))
 
 import Text.Parsec
 import qualified Text.Parsec.Prim as PP 
@@ -107,7 +107,7 @@ parameterList = commaSep (Param <$> name)
 
 stmt :: Parser Stmt
 stmt = do
-	s <- choice [rawExpr, if_, return_]
+	s <- choice [rawExpr, if_]
 	semi
 	return s
 
@@ -119,19 +119,19 @@ if_ = do
 	reserved "if"
 	cond <- expr
 	thenPart <- block
-	elsePart <- option [] else_
+	elsePart <- option (Block [] Nothing) else_
 	return $ If cond thenPart elsePart
 	where else_ = do
 		reserved "else"
 		block
 
-return_ :: Parser Stmt
+return_ :: Parser ReturnStmt
 return_ = do
 	reserved "return"
 	Return <$> expr
 
-block :: Parser [Stmt]
-block = braces $ many stmt
+block :: Parser Block
+block = braces $ Block <$> many stmt <*> optionMaybe return_
 
 classProc :: Parser (Name, ClassDecl)
 classProc = do
