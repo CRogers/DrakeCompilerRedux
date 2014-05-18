@@ -82,9 +82,11 @@ runBuilder (Builder s) nameStr =
 	let initialState = FState M.empty [] 0 LLG.functionDefaults Terminated' in
 	let fstate = snd $ runIxState s initialState in
 	let f = fstate ^. function in
+	let basicBlockNames = reverse $ fstate ^. basicBlockOrder in
+	let bblocks = catMaybes $ catMaybes $ map (flip M.lookup $ fstate ^. basicBlocks) basicBlockNames in
 	f & globName .~ (LL.Name nameStr)
 	  & globReturnType .~ LL.IntegerType 32
-	  & globBasicBlocks .~ (catMaybes $ M.elems $ fstate ^. basicBlocks)
+	  & globBasicBlocks .~ bblocks
 
 getAndIncrementCount :: ABuilder a Word
 getAndIncrementCount = refCount <<+= 1
