@@ -77,16 +77,10 @@ ixuse l = do
 	x <- iget
 	return $ x ^. l
 
-initBuilder :: Builder BasicBlock Terminated a -> CBuilder Terminated a
-initBuilder fb = do
-	entry <- createBasicBlock "entry"
-	switchTo entry
-	fb
-
-runBuilder :: Builder BasicBlock Terminated a -> String -> LL.Global
-runBuilder fb nameStr =
+runBuilder :: CBuilder Terminated a -> String -> LL.Global
+runBuilder (Builder s) nameStr =
 	let initialState = FState M.empty [] 0 LLG.functionDefaults Terminated' in
-	let fstate = snd $ runIxState (unBuilder $ initBuilder fb) initialState in
+	let fstate = snd $ runIxState s initialState in
 	let f = fstate ^. function in
 	f & globName .~ (LL.Name nameStr)
 	  & globReturnType .~ LL.IntegerType 32

@@ -26,18 +26,22 @@ genModule cdi = LL.Module "test" Nothing Nothing [LL.GlobalDefinition $ genClass
 genClassInfo :: ClassDeclInfo -> LL.Global
 genClassInfo (ClassDeclInfo (Name n) _ _ cdecl) = runBuilder (genClassDecl cdecl) n
 
-genClassDecl :: ClassDecl -> Builder BasicBlock Terminated ()
+genClassDecl :: ClassDecl -> CBuilder Terminated ()
 genClassDecl (ClassProc ps stmts) = do
 	setParameters $ zip (repeat i32) (map (\(Param (Name n)) -> n) ps)
-	exit <- createBasicBlock "exit" 
-	genBlock stmts exit
-	switchTo exit
-	ret $ c3
+	entry <- createBasicBlock "entry"
+	genBlock stmts entry $ ret c3
 
-genBlock :: Block -> BasicBlockRef -> Builder BasicBlock Terminated ()
-genBlock [] bbr = br bbr
-genBlock [Return e] _ = ret =<<< genExpr e
-genBlock (s:ss) bbr = genStmt s >> genBlock ss bbr 
+genBlock_ :: Block -> BasicBlockRef -> BasicBlockRef -> CBuilder Terminated ()
+genBlock_ stmts entry exit = genBlock stmts entry $ br exit
+
+genBlock :: Block -> BasicBlockRef -> Builder BasicBlock Terminated () -> CBuilder Terminated ()
+genBlock stmts entry exit = do
+	switchTo entry
+	genBlock' stmts
+	where genBlock' [] = exit
+	      genBlock' [Return e] = ret =<<< genExpr e
+	      genBlock' (s:ss) = genStmt s >> genBlock' ss 
 
 genStmt :: Stmt -> CBuilder BasicBlock ()
 genStmt (RawExpr e) = void $ genExpr e
@@ -47,11 +51,8 @@ genStmt (If cond then_ else_) = do
 	cond' <- genExpr cond
 	condBr cond' thenBB elseBB
 	
-	switchTo thenBB
-	genBlock then_ afterBB
-
-	switchTo elseBB
-	genBlock else_ afterBB
+	genBlock_ then_ thenBB afterBB
+	genBlock_ else_ elseBB afterBB
 
 	switchTo afterBB
 
