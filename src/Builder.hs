@@ -44,7 +44,7 @@ type BasicBlock = FState BState
 type Terminated = FState Terminated'
 
 newtype Builder i o a = Builder { unBuilder :: IxState i o a }
-	deriving (IxFunctor, IxApplicative, IxPointed, IxMonad, IxMonadState)
+	deriving (Functor, IxFunctor, IxApplicative, IxPointed, IxMonad, IxMonadState)
 
 deriving instance Prelude.Monad (Builder i i)
 deriving instance MonadState i (Builder i i)

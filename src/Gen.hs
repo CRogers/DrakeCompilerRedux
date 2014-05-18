@@ -26,17 +26,21 @@ genModule cdi = LL.Module "test" Nothing Nothing [LL.GlobalDefinition $ genClass
 genClassInfo :: ClassDeclInfo -> LL.Global
 genClassInfo (ClassDeclInfo (Name n) _ _ cdecl) = runBuilder (genClassDecl cdecl) n
 
-genClassDecl :: ClassDecl -> Builder BasicBlock (FState a) ()
+genClassDecl :: ClassDecl -> Builder BasicBlock Terminated ()
 genClassDecl (ClassProc ps stmts) = do
 	setParameters $ zip (repeat i32) (map (\(Param (Name n)) -> n) ps)
-	genBlock stmts
+	exit <- createBasicBlock "exit" 
+	genBlock stmts exit
+	switchTo exit
+	ret $ c3
 
-genBlock :: Block -> CBuilder BasicBlock ()
-genBlock = mapM_ genStmt
+genBlock :: Block -> BasicBlockRef -> Builder BasicBlock Terminated ()
+genBlock [] bbr = br bbr
+genBlock [Return e] _ = ret =<<< genExpr e
+genBlock (s:ss) bbr = genStmt s >> genBlock ss bbr 
 
-genStmt :: Stmt -> Builder BasicBlock (FState a) ()
+genStmt :: Stmt -> CBuilder BasicBlock ()
 genStmt (RawExpr e) = void $ genExpr e
-genStmt (Return e) = ret =<<< genExpr e
 genStmt (If cond then_ else_) = do
 	[thenBB, elseBB, afterBB] <- mapM createBasicBlock ["then", "else", "after"]
 	
@@ -44,16 +48,14 @@ genStmt (If cond then_ else_) = do
 	condBr cond' thenBB elseBB
 	
 	switchTo thenBB
-	genBlock then_
-	br afterBB
+	genBlock then_ afterBB
 
 	switchTo elseBB
-	genBlock else_
-	br afterBB
+	genBlock else_ afterBB
 
 	switchTo afterBB
 
 
-genExpr :: Expr -> Builder BasicBlock (FState a) ValueRef
+genExpr :: Expr -> CBuilder BasicBlock ValueRef
 genExpr (IntLit i) = return $ constant i
 genExpr (BoolLit b) = return $ boolToI1 b
