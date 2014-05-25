@@ -1,6 +1,6 @@
-{-# LANGUAGE GADTs, ConstraintKinds, PolyKinds, DataKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, DataKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
 
-module Builder where
+module LLVMBuilder.Core where
 
 import Prelude hiding (Monad(..))
 import qualified Prelude as Prelude
@@ -14,13 +14,13 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
 import Data.Word (Word)
-import GHC.TypeLits (Nat)
 
 import qualified LLVM.General.AST as LL
-import qualified LLVM.General.AST.Constant as LLC
 import qualified LLVM.General.AST.Global as LLG
 
 import IxState
+import LLVMBuilder.IxLens
+import LLVMBuilder.Types
 
 makeLensesWith (lensRules & lensField .~ (\s -> Just $ "glob" ++ map toUpper (take 1 s) ++ drop 1 s)) ''LL.Global
 
@@ -42,18 +42,6 @@ data FState a = FState {
 } deriving Show
 makeLenses ''FState
 
-type family IntOrIntVector (a :: LLVMType) where
-	IntOrIntVector (IntTy x) = True
-
-type IsIntOrIntVector a = IntOrIntVector a ~ True
-
-data LLVMType where
-	VoidTy :: LLVMType
-	IntTy :: Nat -> LLVMType
-	PointerTy :: LLVMType -> LLVMType
-
-type BoolTy = IntTy 1
-
 newtype Builder' i o a = Builder { unBuilder :: IxState i o a }
 	deriving (Functor, IxFunctor, IxApplicative, IxPointed, IxMonad, IxMonadState)
 
@@ -63,30 +51,11 @@ deriving instance MonadState i (Builder' i i)
 type Builder i o a = Builder' (FState i) (FState o) a
 type CBuilder s a = Builder s s a
 
-newtype BasicBlockRef = BasicBlockRef { _unBasicBlockRef :: LL.Name } deriving (Eq, Show)
-makeLenses ''BasicBlockRef
-
-newtype ValueRef (t :: LLVMType) = ValueRef { _unValueRef :: LL.Operand } deriving (Eq, Show)
-makeLenses ''ValueRef
-
-vrFromString :: String -> (ValueRef t)
+vrFromString :: String -> ValueRef
 vrFromString = vrFromName . LL.Name
 
-vrFromName :: LL.Name -> (ValueRef t)
+vrFromName :: LL.Name -> ValueRef
 vrFromName = ValueRef . LL.LocalReference
-
-infix 4 .==, %==
-
-(.==) :: IxMonadState m => ASetter s t a b -> b -> m s t ()
-l .== b = imodify (l .~ b)   
-
-(%==) :: (Profunctor p, IxMonadState m) => Setting p s t a b -> p a b -> m s t ()
-l %== b = imodify (l %~ b)
-
-ixuse :: IxMonadState m => Getting a s a -> m s s a
-ixuse l = do
-	x <- iget
-	return $ x ^. l
 
 runBuilder :: Builder Setup Terminated () -> String -> LL.Global
 runBuilder (Builder s) nameStr =
@@ -107,13 +76,13 @@ getNextUnName = do
 	c <- getAndIncrementCount
 	return $ LL.UnName c
 
-setParameters :: [(LL.Type, String)] -> CBuilder Setup [ValueRef a]
+setParameters :: [(LL.Type, String)] -> CBuilder Setup [ValueRef]
 setParameters ps = do
 	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
 	function.globParameters .= (params, False)
 	return $ map (vrFromString . snd) ps
 
-getParameter :: Int -> CBuilder BasicBlock (ValueRef a)
+getParameter :: Int -> CBuilder BasicBlock ValueRef
 getParameter i = do
 	f <- ixuse function
 	let ps = LLG.parameters f
@@ -145,18 +114,12 @@ switchTo (BasicBlockRef n) = do
 		Just Nothing -> innerState .== BasicBlock [] n
 		Nothing -> error "wtf?"
 
-appendInstr :: LL.Instruction -> CBuilder BasicBlock (ValueRef a)
+appendInstr :: LL.Instruction -> CBuilder BasicBlock ValueRef
 appendInstr instr = do
 	n <- getNextUnName
 	let i = n LL.:= instr
 	innerState.instrs %== (i :)
 	return $ vrFromName n
-
-add :: IsIntOrIntVector t => ValueRef t -> ValueRef t -> CBuilder BasicBlock (ValueRef t)
-add (ValueRef x) (ValueRef y) = appendInstr $ LL.Add False False x y []
-
---alloca :: LL.Type -> CBuilder BasicBlock ValueRef
---alloca t = appendInstr $ LL.Alloca
 
 appendTerm :: LL.Terminator -> Builder BasicBlock Terminated ()
 appendTerm t = do
@@ -167,27 +130,3 @@ appendTerm t = do
 	basicBlocks %== M.insert curBlock (Just bb)
 	innerState .== Terminated
 
-ret :: ValueRef a -> Builder BasicBlock Terminated ()
-ret (ValueRef x) = appendTerm $ LL.Ret (Just x) []
-
-br :: BasicBlockRef -> Builder BasicBlock Terminated ()
-br (BasicBlockRef n) = appendTerm $ LL.Br n [] 
-
-condBr :: ValueRef BoolTy -> BasicBlockRef -> BasicBlockRef -> Builder BasicBlock Terminated ()
-condBr (ValueRef cond) (BasicBlockRef true) (BasicBlockRef false) = appendTerm $ LL.CondBr cond true false []
- 
-constant :: Integer -> ValueRef (IntTy 32)
-constant = ValueRef . LL.ConstantOperand . LLC.Int 32
-
-c3 :: ValueRef (IntTy 32)
-c3 = constant 3
-
-test :: Builder BasicBlock Terminated ()
-test = do
-	b <- add c3 c3
-	x <- add b b
-	ret x
-	bl <- createBasicBlock "bl"
-	switchTo bl
-	y <- add b x
-	ret y

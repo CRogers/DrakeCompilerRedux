@@ -3,7 +3,7 @@
 
 module Parser where
 
-import Control.Applicative ((<$>),(<*>))
+import Control.Applicative ((<$>),(<*>),(<*))
 
 import Text.Parsec
 import qualified Text.Parsec.Prim as PP 
@@ -139,7 +139,7 @@ return_ = do
 	Return <$> expr
 
 block :: Parser Block
-block = braces $ Block <$> many stmt <*> optionMaybe return_
+block = braces $ Block <$> many stmt <*> optionMaybe (return_ <* semi)
 
 classProc :: Parser (Name, ClassDecl)
 classProc = do

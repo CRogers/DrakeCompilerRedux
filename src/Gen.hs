@@ -12,12 +12,12 @@ import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
 
 import Tree
-import Builder
+import LLVMBuilder.Builder
 
 i32 :: LL.Type
 i32 = LL.IntegerType 32
 
-boolToI1 :: Bool -> (ValueRef BoolTy)
+boolToI1 :: Bool -> ValueRef
 boolToI1 cond = ValueRef $ LL.ConstantOperand $ LLC.Int 1 $ if cond then 1 else 0
 
 genModule :: ClassDeclInfo -> LL.Module
@@ -30,7 +30,7 @@ genClassDecl :: ClassDecl -> Builder Setup Terminated ()
 genClassDecl (ClassProc ps stmts) = do
 	setParameters $ zip (repeat i32) (map (\(Param (Name n)) -> n) ps)
 	entry <- createBasicBlock "entry"
-	genBlock_ stmts entry $ ret c3
+	genBlock_ stmts entry (ret $ constant 3)
 
 genBlock :: IsSetupOrTerminated a => Block -> BasicBlockRef -> BasicBlockRef -> Builder a Terminated ()
 genBlock stmts entry exit = genBlock_ stmts entry $ br exit
@@ -57,6 +57,6 @@ genStmt (If cond then_ else_) = do
 	switchTo afterBB
 
 
---genExpr :: Expr -> CBuilder BasicBlock (ValueRef t)
+genExpr :: Expr -> CBuilder BasicBlock ValueRef
 genExpr (IntLit i) = return $ constant i
 genExpr (BoolLit b) = return $ boolToI1 b

@@ -12,7 +12,7 @@ import Parser
 import Desugar
 import Test
 import Gen
-import Builder
+import LLVMBuilder.Builder
 import IxState
 
 failInIO :: forall c. ErrorT String IO c -> IO c
