@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, DataKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE GADTs, ConstraintKinds, PolyKinds, DataKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
 
 module Builder where
 
@@ -14,6 +14,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
 import Data.Word (Word)
+import GHC.TypeLits (Nat)
 
 import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
@@ -41,6 +42,18 @@ data FState a = FState {
 } deriving Show
 makeLenses ''FState
 
+type family IntOrIntVector (a :: LLVMType) where
+	IntOrIntVector (IntTy x) = True
+
+type IsIntOrIntVector a = IntOrIntVector a ~ True
+
+data LLVMType where
+	VoidTy :: LLVMType
+	IntTy :: Nat -> LLVMType
+	PointerTy :: LLVMType -> LLVMType
+
+type BoolTy = IntTy 1
+
 newtype Builder' i o a = Builder { unBuilder :: IxState i o a }
 	deriving (Functor, IxFunctor, IxApplicative, IxPointed, IxMonad, IxMonadState)
 
@@ -53,13 +66,13 @@ type CBuilder s a = Builder s s a
 newtype BasicBlockRef = BasicBlockRef { _unBasicBlockRef :: LL.Name } deriving (Eq, Show)
 makeLenses ''BasicBlockRef
 
-newtype ValueRef = ValueRef { _unValueRef :: LL.Operand } deriving (Eq, Show)
+newtype ValueRef (t :: LLVMType) = ValueRef { _unValueRef :: LL.Operand } deriving (Eq, Show)
 makeLenses ''ValueRef
 
-vrFromString :: String -> ValueRef
+vrFromString :: String -> (ValueRef t)
 vrFromString = vrFromName . LL.Name
 
-vrFromName :: LL.Name -> ValueRef
+vrFromName :: LL.Name -> (ValueRef t)
 vrFromName = ValueRef . LL.LocalReference
 
 infix 4 .==, %==
@@ -94,13 +107,13 @@ getNextUnName = do
 	c <- getAndIncrementCount
 	return $ LL.UnName c
 
-setParameters :: [(LL.Type, String)] -> CBuilder Setup [ValueRef]
+setParameters :: [(LL.Type, String)] -> CBuilder Setup [ValueRef a]
 setParameters ps = do
 	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
 	function.globParameters .= (params, False)
 	return $ map (vrFromString . snd) ps
 
-getParameter :: Int -> CBuilder BasicBlock ValueRef
+getParameter :: Int -> CBuilder BasicBlock (ValueRef a)
 getParameter i = do
 	f <- ixuse function
 	let ps = LLG.parameters f
@@ -132,15 +145,18 @@ switchTo (BasicBlockRef n) = do
 		Just Nothing -> innerState .== BasicBlock [] n
 		Nothing -> error "wtf?"
 
-appendInstr :: LL.Instruction -> CBuilder BasicBlock ValueRef
+appendInstr :: LL.Instruction -> CBuilder BasicBlock (ValueRef a)
 appendInstr instr = do
 	n <- getNextUnName
 	let i = n LL.:= instr
 	innerState.instrs %== (i :)
 	return $ vrFromName n
 
-add :: ValueRef -> ValueRef -> CBuilder BasicBlock ValueRef
+add :: IsIntOrIntVector t => ValueRef t -> ValueRef t -> CBuilder BasicBlock (ValueRef t)
 add (ValueRef x) (ValueRef y) = appendInstr $ LL.Add False False x y []
+
+--alloca :: LL.Type -> CBuilder BasicBlock ValueRef
+--alloca t = appendInstr $ LL.Alloca
 
 appendTerm :: LL.Terminator -> Builder BasicBlock Terminated ()
 appendTerm t = do
@@ -151,19 +167,19 @@ appendTerm t = do
 	basicBlocks %== M.insert curBlock (Just bb)
 	innerState .== Terminated
 
-ret :: ValueRef -> Builder BasicBlock Terminated ()
+ret :: ValueRef a -> Builder BasicBlock Terminated ()
 ret (ValueRef x) = appendTerm $ LL.Ret (Just x) []
 
 br :: BasicBlockRef -> Builder BasicBlock Terminated ()
 br (BasicBlockRef n) = appendTerm $ LL.Br n [] 
 
-condBr :: ValueRef -> BasicBlockRef -> BasicBlockRef -> Builder BasicBlock Terminated ()
+condBr :: ValueRef BoolTy -> BasicBlockRef -> BasicBlockRef -> Builder BasicBlock Terminated ()
 condBr (ValueRef cond) (BasicBlockRef true) (BasicBlockRef false) = appendTerm $ LL.CondBr cond true false []
  
-constant :: Integer -> ValueRef
+constant :: Integer -> ValueRef (IntTy 32)
 constant = ValueRef . LL.ConstantOperand . LLC.Int 32
 
-c3 :: ValueRef
+c3 :: ValueRef (IntTy 32)
 c3 = constant 3
 
 test :: Builder BasicBlock Terminated ()

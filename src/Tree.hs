@@ -1,50 +1,53 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving, KindSignatures, DataKinds, GADTs, GeneralizedNewtypeDeriving #-}
 
 module Tree where
 
 import Data.Monoid (Monoid)
 
-newtype Name = Name String deriving (Eq,Show,Monoid)
-newtype VarName = VarName String deriving (Eq,Show,Monoid)
+newtype Name = Name String deriving (Show,Monoid)
+newtype VarName (a :: Type) = VarName String deriving (Show,Monoid)
 
 data Namespace = Namespace Name [DeclInfo]
-	deriving (Eq,Show)
+	deriving (Show)
 
 data DeclInfo = DeclInfo Name Decl
-	deriving (Eq,Show)
+	deriving (Show)
 
 data Decl
 	= Class [ClassDeclInfo]
 	| Interface
-	deriving (Eq,Show)
+	deriving (Show)
 
-data Visibility = Private | Public deriving (Eq,Show)
-data Static = Static | Instance deriving (Eq,Show)
+data Visibility = Private | Public deriving (Show)
+data Static = Static | Instance deriving (Show)
 
-data Param = Param Name deriving (Eq,Show)
+data Param = Param Name deriving (Show)
 
 data ClassDeclInfo = ClassDeclInfo Name Visibility Static ClassDecl
-	deriving (Eq,Show)
+	deriving (Show)
 
-data Block = Block [Stmt] (Maybe ReturnStmt)
-	deriving (Eq,Show)
+data Block a = Block [Stmt] (Maybe (ReturnStmt a))
+deriving instance Show (Block a)
 
-data ClassDecl
-	= ClassVar Expr
-	| ClassProc [Param] Block
-	deriving (Eq,Show)
+data ClassDecl where
+	ClassVar :: Expr a -> ClassDecl
+	ClassProc :: [Param] -> Block a -> ClassDecl
+deriving instance Show ClassDecl
 
-data Stmt
-	= RawExpr Expr
-	| Assign VarName Expr
-	| If Expr Block Block
-	deriving (Eq,Show)
+data Stmt where
+	RawExpr :: Expr a -> Stmt
+	Assign :: VarName a -> Expr a -> Stmt
+	If :: Expr b -> Block a -> Block a -> Stmt
+deriving instance Show Stmt
 
-data ReturnStmt = Return Expr
-	deriving (Eq,Show)
+data ReturnStmt (a :: Type) = Return (Expr a)
+deriving instance Show (ReturnStmt a)
 
-data Expr
-	= Var VarName
-	| IntLit Integer
-	| BoolLit Bool
-	deriving (Eq,Show)
+data Type = Int32 | Boolean
+	deriving (Show)
+
+data Expr (a :: Type) where
+	Var :: VarName a -> Expr a
+	IntLit :: Integer -> Expr Int32
+	BoolLit :: Bool -> Expr Boolean
+deriving instance Show (Expr a)

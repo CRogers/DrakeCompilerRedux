@@ -17,7 +17,7 @@ import Builder
 i32 :: LL.Type
 i32 = LL.IntegerType 32
 
-boolToI1 :: Bool -> ValueRef
+boolToI1 :: Bool -> (ValueRef BoolTy)
 boolToI1 cond = ValueRef $ LL.ConstantOperand $ LLC.Int 1 $ if cond then 1 else 0
 
 genModule :: ClassDeclInfo -> LL.Module
@@ -57,6 +57,6 @@ genStmt (If cond then_ else_) = do
 	switchTo afterBB
 
 
-genExpr :: Expr -> CBuilder BasicBlock ValueRef
+--genExpr :: Expr -> CBuilder BasicBlock (ValueRef t)
 genExpr (IntLit i) = return $ constant i
 genExpr (BoolLit b) = return $ boolToI1 b
