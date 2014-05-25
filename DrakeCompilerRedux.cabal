@@ -29,6 +29,7 @@ executable DrakeCompilerRedux
                      , directory
                      , llvm-general >3.4
                      , llvm-general-pure >3.4
+                     , singletons
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
