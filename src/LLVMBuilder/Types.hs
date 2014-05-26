@@ -29,7 +29,7 @@ singletons [d|
 		deriving (Show)
  |]
 
-type BoolTy = 'IntTy N1
+type BoolTy = 'IntTy ('Succ 'Zero)
 
 fromNat :: Nat -> Word32
 fromNat Zero = 0
@@ -51,36 +51,3 @@ data ValueRef :: LLVMType -> * where
 
 instance Show (ValueRef t) where
 	show (ValueRef ty op) = "ValueRef (" ++ show (fromSing ty) ++ ") (" ++ show op ++ ")"
-
-type P0 n = Succ n
-type P1 n = P0 (P0 n)
-type P2 n = P1 (P1 n)
-type P3 n = P2 (P2 n)
-type P4 n = P3 (P3 n)
-type P5 n = P4 (P4 n)
-
-type N1 = Succ Zero
-type SN1 = Sing N1
-
-type N16  = P4 Zero
-type SN16 = Sing N16
-
-type N32 = P5 Zero
-type SN32 = Sing N32
-
-p0 n = SSucc n
-p1 n = p0 (p0 n)
-p2 n = p1 (p1 n)
-p3 n = p2 (p2 n)
-p4 n = p3 (p3 n)
-p5 n = p4 (p4 n)
-
-sn16 :: SN16
-sn16 = p4 SZero
-
-sn32 :: SN32
-sn32 = p5 SZero
-
-toNat :: Integer -> Nat
-toNat 0 = Zero
-toNat n = Succ (toNat $ n - 1)

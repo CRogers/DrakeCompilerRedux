@@ -1,4 +1,5 @@
 {-# LANGUAGE RebindableSyntax, DataKinds #-}
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 
 module LLVMBuilder.Examples where
 
@@ -14,7 +15,10 @@ test :: Builder Setup Terminated ()
 test = do
 	entry <- createBasicBlock "entry"
 	switchTo entry
-	alloca (SIntTy sn32) $ constant sn32 1
+	addr <- alloca (SIntTy sn32) $ constant sn32 1
+	loaded <- load addr
+	plus3 <- add loaded c3
+	store addr plus3
 	b <- add c3 c3
 	x <- add b b
 	ret x
