@@ -51,11 +51,13 @@ deriving instance MonadState i (Builder' i i)
 type Builder i o a = Builder' (FState i) (FState o) a
 type CBuilder s a = Builder s s a
 
-vrFromString :: String -> ValueRef
+{-
+vrFromString :: LLVMType String -> ValueRef t
 vrFromString = vrFromName . LL.Name
+-}
+vrFromName :: SLLVMType t -> LL.Name -> ValueRef t
+vrFromName t = (ValueRef t) . LL.LocalReference
 
-vrFromName :: LL.Name -> ValueRef
-vrFromName = ValueRef . LL.LocalReference
 
 runBuilder :: Builder Setup Terminated () -> String -> LL.Global
 runBuilder (Builder s) nameStr =
@@ -75,7 +77,7 @@ getNextUnName :: CBuilder a LL.Name
 getNextUnName = do
 	c <- getAndIncrementCount
 	return $ LL.UnName c
-
+{-
 setParameters :: [(LL.Type, String)] -> CBuilder Setup [ValueRef]
 setParameters ps = do
 	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
@@ -88,7 +90,7 @@ getParameter i = do
 	let ps = LLG.parameters f
 	let (LLG.Parameter _ n _) = fst ps !! i
 	return $ vrFromName n
-
+-}
 createBasicBlock :: String -> CBuilder a BasicBlockRef
 createBasicBlock n = do
 	c <- getAndIncrementCount
@@ -114,12 +116,12 @@ switchTo (BasicBlockRef n) = do
 		Just Nothing -> innerState .== BasicBlock [] n
 		Nothing -> error "wtf?"
 
-appendInstr :: LL.Instruction -> CBuilder BasicBlock ValueRef
-appendInstr instr = do
+appendInstr :: SLLVMType t -> LL.Instruction -> CBuilder BasicBlock (ValueRef t)
+appendInstr t instr = do
 	n <- getNextUnName
 	let i = n LL.:= instr
 	innerState.instrs %== (i :)
-	return $ vrFromName n
+	return $ vrFromName t n
 
 appendTerm :: LL.Terminator -> Builder BasicBlock Terminated ()
 appendTerm t = do

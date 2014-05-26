@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module LLVMBuilder.Instructions where
 
 import LLVMBuilder.Core
@@ -6,20 +8,20 @@ import LLVMBuilder.Types
 import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
 
-add :: ValueRef -> ValueRef -> CBuilder BasicBlock ValueRef
-add (ValueRef x) (ValueRef y) = appendInstr $ LL.Add False False x y []
+add :: ValueRef t -> ValueRef t -> CBuilder BasicBlock (ValueRef t)
+add (ValueRef t x) (ValueRef _ y) = appendInstr t $ LL.Add False False x y []
 
---alloca :: LL.Type -> CBuilder BasicBlock ValueRef
---alloca t = appendInstr $ LL.Alloca
+alloca :: SLLVMType t -> ValueRef ('IntTy N32) -> CBuilder BasicBlock (ValueRef ('PointerTy t))
+alloca t (ValueRef _ n) = appendInstr (SPointerTy t) $ LL.Alloca (fromSLLVM t) (Just n) 0 []
 
-ret :: ValueRef -> Builder BasicBlock Terminated ()
-ret (ValueRef x) = appendTerm $ LL.Ret (Just x) []
+ret :: ValueRef t -> Builder BasicBlock Terminated ()
+ret (ValueRef _ x) = appendTerm $ LL.Ret (Just x) []
 
 br :: BasicBlockRef -> Builder BasicBlock Terminated ()
 br (BasicBlockRef n) = appendTerm $ LL.Br n [] 
 
-condBr :: ValueRef -> BasicBlockRef -> BasicBlockRef -> Builder BasicBlock Terminated ()
-condBr (ValueRef cond) (BasicBlockRef true) (BasicBlockRef false) = appendTerm $ LL.CondBr cond true false []
+condBr :: ValueRef BoolTy -> BasicBlockRef -> BasicBlockRef -> Builder BasicBlock Terminated ()
+condBr (ValueRef _ cond) (BasicBlockRef true) (BasicBlockRef false) = appendTerm $ LL.CondBr cond true false []
  
-constant :: Integer -> ValueRef
-constant = ValueRef . LL.ConstantOperand . LLC.Int 32
+constant :: SNat n -> Integer -> ValueRef ('IntTy n)
+constant n = ValueRef (SIntTy n) . LL.ConstantOperand . LLC.Int (fromSNat n)
