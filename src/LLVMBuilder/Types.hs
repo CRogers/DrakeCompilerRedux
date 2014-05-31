@@ -9,6 +9,7 @@ import qualified LLVM.General.AST as LL
 import LLVM.General.AST.AddrSpace (AddrSpace(..))
 
 import Data.Singletons.TH
+import Data.Singletons.Prelude.List
 
 newtype BasicBlockRef = BasicBlockRef { unBasicBlockRef :: LL.Name } deriving (Eq, Show)
 
@@ -42,6 +43,16 @@ instance SingKind ('KProxy :: KProxy Parameter) where
   fromSing (SParam s t) = ParamTerm s (fromSing t)
   toSing (ParamTerm s t) = case toSing t of
                SomeSing t' -> SomeSing (SParam s t')
+
+genDefunSymbols [''Parameter]
+
+promoteOnly [d|
+	parameterToLLVMType :: Parameter -> LLVMType
+	parameterToLLVMType (Param t) = t
+
+	parametersToLLVMTypes :: [Parameter] -> [LLVMType]
+	parametersToLLVMTypes = map parameterToLLVMType
+ |]
 
 type BoolTy = 'IntTy ('Succ 'Zero)
 

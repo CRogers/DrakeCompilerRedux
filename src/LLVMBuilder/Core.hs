@@ -14,7 +14,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
 import Data.Singletons
-import Data.Singletons.Prelude.List (Sing(..), SList)
+import Data.Singletons.Prelude.List (Sing(..), SList, sMap)
 import Data.Word (Word)
 
 import qualified LLVM.General.AST as LL
@@ -84,13 +84,20 @@ getNextUnName = do
 sparameterToLLVMParameter :: SList (t :: [Parameter]) -> [LL.Parameter]
 sparameterToLLVMParameter ps = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) (fromSing ps)
 
-setParameters :: SList (t :: [Parameter]) -> CBuilder Setup ()
+sListParamToSListLLVMType :: SList (t :: [Parameter]) -> SList (ParametersToLLVMTypes t)
+sListParamToSListLLVMType SNil = SNil
+sListParamToSListLLVMType (SCons (SParam _ t) ps) = SCons t $ sListParamToSListLLVMType ps
+
+setParameters :: SList (t :: [Parameter]) -> CBuilder Setup (SList (ParametersToLLVMTypes t))
 setParameters ps = do
-	let llparams = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) (fromSing ps)
+	renamed <- flip mapM (fromSing ps) $ \(ParamTerm n t) -> do
+		c <- getAndIncrementCount
+		return $ ParamTerm (n ++ "." ++ show c) t
+	let llparams = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) renamed
 	parameters .= llparams
-	return ()
+	return $ sListParamToSListLLVMType ps
 {-
-getParameter :: Int -> CBuilder BasicBlock ValueRef
+getParameter :: SNat -> CBuilder BasicBlock ValueRef
 getParameter i = do
 	f <- ixuse function
 	let ps = LLG.parameters f
