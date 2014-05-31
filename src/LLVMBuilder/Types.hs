@@ -30,8 +30,6 @@ singletons [d|
 		deriving (Show)
  |]
 
-type BoolTy = 'IntTy ('Succ 'Zero)
-
 fromNat :: Nat -> Word32
 fromNat Zero = 0
 fromNat (Succ n) = 1 + fromNat n

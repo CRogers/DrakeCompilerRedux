@@ -2,11 +2,10 @@
 
 module LLVMBuilder.Instructions where
 
-import Data.Singletons.Prelude.List (Sing(..))
-
 import LLVMBuilder.Core
 import LLVMBuilder.Types
 import LLVMBuilder.Numbers
+import LLVMBuilder.LLTypes
 
 import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
