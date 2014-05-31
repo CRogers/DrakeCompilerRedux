@@ -13,6 +13,8 @@ import Data.Char (toUpper)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
+import Data.Singletons
+import Data.Singletons.Prelude.List (Sing(..), SList)
 import Data.Word (Word)
 
 import qualified LLVM.General.AST as LL
@@ -21,8 +23,6 @@ import qualified LLVM.General.AST.Global as LLG
 import IxState
 import LLVMBuilder.IxLens
 import LLVMBuilder.Types
-
-makeLensesWith (lensRules & lensField .~ (\s -> Just $ "glob" ++ map toUpper (take 1 s) ++ drop 1 s)) ''LL.Global
 
 data BasicBlock = BasicBlock {
 	_instrs :: [LL.Named LL.Instruction],
@@ -37,7 +37,7 @@ data FState a = FState {
 	_basicBlocks :: Map LL.Name (Maybe LL.BasicBlock),
 	_basicBlockOrder :: [LL.Name],
 	_refCount :: Word,
-	_function :: LL.Global,
+	_parameters :: [LL.Parameter],
 	_innerState :: a
 } deriving Show
 makeLenses ''FState
@@ -61,14 +61,17 @@ vrFromName t = (ValueRef t) . LL.LocalReference
 
 runBuilder :: Builder Setup Terminated () -> String -> LL.Global
 runBuilder (Builder s) nameStr =
-	let initialState = FState M.empty [] 0 LLG.functionDefaults Setup in
+	let initialState = FState M.empty [] 0 [] Setup in
 	let fstate = snd $ runIxState s initialState in
-	let f = fstate ^. function in
 	let basicBlockNames = reverse $ fstate ^. basicBlockOrder in
 	let bblocks = catMaybes $ catMaybes $ map (flip M.lookup $ fstate ^. basicBlocks) basicBlockNames in
-	f & globName .~ (LL.Name nameStr)
-	  & globReturnType .~ LL.IntegerType 32
-	  & globBasicBlocks .~ bblocks
+	let llparams = fstate ^. parameters in
+	LLG.functionDefaults {
+		LLG.name = LL.Name nameStr,
+		LLG.returnType = LL.IntegerType 32,
+		LLG.parameters = (llparams, False),
+		LLG.basicBlocks = bblocks
+	}
 
 getAndIncrementCount :: CBuilder a Word
 getAndIncrementCount = refCount <<+= 1
@@ -77,13 +80,16 @@ getNextUnName :: CBuilder a LL.Name
 getNextUnName = do
 	c <- getAndIncrementCount
 	return $ LL.UnName c
-{-
-setParameters :: [(LL.Type, String)] -> CBuilder Setup [ValueRef]
-setParameters ps = do
-	let params = map (\(t,n) -> LL.Parameter t (LL.Name n) []) ps
-	function.globParameters .= (params, False)
-	return $ map (vrFromString . snd) ps
 
+sparameterToLLVMParameter :: SList (t :: [Parameter]) -> [LL.Parameter]
+sparameterToLLVMParameter ps = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) (fromSing ps)
+
+setParameters :: SList (t :: [Parameter]) -> CBuilder Setup ()
+setParameters ps = do
+	let llparams = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) (fromSing ps)
+	parameters .= llparams
+	return ()
+{-
 getParameter :: Int -> CBuilder BasicBlock ValueRef
 getParameter i = do
 	f <- ixuse function

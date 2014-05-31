@@ -29,6 +29,20 @@ singletons [d|
 		deriving (Show)
  |]
 
+data Parameter = Param LLVMType deriving Show
+data ParameterTerm = ParamTerm String LLVMType deriving Show
+
+data instance Sing (x :: Parameter) where
+	SParam :: String -> Sing x -> Sing (Param x)
+
+type SParameter (x :: Parameter) = Sing x
+
+instance SingKind ('KProxy :: KProxy Parameter) where
+  type DemoteRep ('KProxy :: KProxy Parameter) = ParameterTerm
+  fromSing (SParam s t) = ParamTerm s (fromSing t)
+  toSing (ParamTerm s t) = case toSing t of
+               SomeSing t' -> SomeSing (SParam s t')
+
 type BoolTy = 'IntTy ('Succ 'Zero)
 
 fromNat :: Nat -> Word32
