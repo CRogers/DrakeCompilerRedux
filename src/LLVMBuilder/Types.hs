@@ -94,3 +94,9 @@ promoteOnly [d|
 	lLVMTypesToValueRefs :: [LLVMType] -> [ValueRef]
 	lLVMTypesToValueRefs = map ValueRef 
  |]
+
+singletons [d|
+	at :: Nat -> [a] -> a
+	at Zero (a:as) = a
+	at (Succ n) (a:as) = at n as
+ |]

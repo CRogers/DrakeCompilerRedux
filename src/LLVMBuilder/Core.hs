@@ -6,7 +6,7 @@ import Prelude hiding (Monad(..))
 import qualified Prelude as Prelude
 import IxMonadSyntax
 
-import Control.Lens
+import Control.Lens hiding (At)
 import Control.Monad.Indexed
 import Control.Monad.State.Class (MonadState(..))
 import Data.Map.Strict (Map)
@@ -58,6 +58,8 @@ vrFromString t = vrFromName t . LL.Name
 vrFromName :: SLLVMType t -> LL.Name -> VR t
 vrFromName t = (SValueRef t) . LL.LocalReference
 
+vrFromParam :: SParameter ('Param t) -> VR t
+vrFromParam (SParam n t) = vrFromString t n
 
 runBuilder :: Builder Setup '[] Terminated ops () -> String -> LL.Global
 runBuilder (Builder s) nameStr =
@@ -102,14 +104,13 @@ setParameters ps = do
 	renamed <- sAppendName ps
 	parameters .== renamed
 	return $ sListParamToSListValueRef ps
-{-
-getParameter :: SNat -> CBuilder BasicBlock ValueRef
-getParameter i = do
-	f <- ixuse function
-	let ps = LLG.parameters f
-	let (LLG.Parameter _ n _) = fst ps !! i
-	return $ vrFromName n
--}
+
+getParameter :: (At n (LLVMTypesToParams ts) ~ 'Param t) => SNat n -> CBuilder BasicBlock ts (VR t)
+getParameter n = do
+	ps <- ixuse parameters
+	let p = sAt n ps
+	return $ vrFromParam p
+
 createBasicBlock :: String -> CBuilder a ps BasicBlockRef
 createBasicBlock n = do
 	c <- getAndIncrementCount
