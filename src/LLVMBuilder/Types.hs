@@ -1,4 +1,4 @@
-{-# LANGUAGE StandaloneDeriving, FlexibleInstances, ScopedTypeVariables, TypeOperators, UndecidableInstances, TemplateHaskell, GADTs, DataKinds, ConstraintKinds, TypeFamilies #-}
+{-# LANGUAGE StandaloneDeriving, FlexibleInstances, ScopedTypeVariables, TypeOperators, UndecidableInstances, TemplateHaskell, GADTs, DataKinds, PolyKinds, ConstraintKinds, TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
 module LLVMBuilder.Types where
@@ -30,30 +30,6 @@ singletons [d|
 		deriving (Show)
  |]
 
-data Parameter = Param LLVMType deriving Show
-data ParameterTerm = ParamTerm String LLVMType deriving Show
-
-data instance Sing (x :: Parameter) where
-	SParam :: String -> Sing x -> Sing (Param x)
-
-type SParameter (x :: Parameter) = Sing x
-
-instance SingKind ('KProxy :: KProxy Parameter) where
-  type DemoteRep ('KProxy :: KProxy Parameter) = ParameterTerm
-  fromSing (SParam s t) = ParamTerm s (fromSing t)
-  toSing (ParamTerm s t) = case toSing t of
-               SomeSing t' -> SomeSing (SParam s t')
-
-genDefunSymbols [''Parameter]
-
-promoteOnly [d|
-	parameterToLLVMType :: Parameter -> LLVMType
-	parameterToLLVMType (Param t) = t
-
-	parametersToLLVMTypes :: [Parameter] -> [LLVMType]
-	parametersToLLVMTypes = map parameterToLLVMType
- |]
-
 type BoolTy = 'IntTy ('Succ 'Zero)
 
 fromNat :: Nat -> Word32
@@ -71,8 +47,36 @@ fromLLVM (PointerTy t) = LL.PointerType (fromLLVM t) (AddrSpace 0)
 fromSLLVM :: SLLVMType t -> LL.Type
 fromSLLVM = fromLLVM . fromSing
 
-data ValueRef :: LLVMType -> * where
-	ValueRef :: SLLVMType t -> LL.Operand -> ValueRef t
+data Parameter = Param LLVMType deriving Show
+data ParameterTerm = ParamTerm String LLVMType deriving Show
 
-instance Show (ValueRef t) where
-	show (ValueRef ty op) = "ValueRef (" ++ show (fromSing ty) ++ ") (" ++ show op ++ ")"
+data instance Sing (x :: Parameter) where
+	SParam :: String -> Sing x -> Sing (Param x)
+
+type SParameter (x :: Parameter) = Sing x
+
+instance SingKind ('KProxy :: KProxy Parameter) where
+  type DemoteRep ('KProxy :: KProxy Parameter) = ParameterTerm
+  fromSing (SParam s t) = ParamTerm s (fromSing t)
+  toSing (ParamTerm s t) = case toSing t of
+               SomeSing t' -> SomeSing (SParam s t')
+
+data ValueRef = ValueRef LLVMType
+data ValueRefTerm = ValueRefTerm LL.Operand LLVMType
+
+data instance Sing (x :: ValueRef) where
+	SValueRef :: Sing x -> LL.Operand -> Sing ('ValueRef x)
+
+type SValueRef (x :: ValueRef) = Sing x
+
+type VR t = SValueRef ('ValueRef t)
+
+genDefunSymbols [''Parameter, ''ValueRef]
+
+promoteOnly [d|
+	parameterToValueRef :: Parameter -> ValueRef
+	parameterToValueRef (Param t) = ValueRef t
+
+	parametersToValueRefs :: [Parameter] -> [ValueRef]
+	parametersToValueRefs = map parameterToValueRef
+ |]

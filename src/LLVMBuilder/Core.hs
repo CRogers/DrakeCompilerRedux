@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, DataKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, DataKinds, PolyKinds, TypeFamilies, StandaloneDeriving, TemplateHaskell, RebindableSyntax, GeneralizedNewtypeDeriving, TupleSections, FlexibleInstances, MultiParamTypeClasses #-}
 
 module LLVMBuilder.Core where
 
@@ -9,12 +9,11 @@ import IxMonadSyntax
 import Control.Lens
 import Control.Monad.Indexed
 import Control.Monad.State.Class (MonadState(..))
-import Data.Char (toUpper)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
 import Data.Singletons
-import Data.Singletons.Prelude.List (Sing(..), SList, sMap)
+import Data.Singletons.Prelude.List (Sing(..), SList)
 import Data.Word (Word)
 
 import qualified LLVM.General.AST as LL
@@ -51,12 +50,12 @@ deriving instance MonadState i (Builder' i i)
 type Builder i o a = Builder' (FState i) (FState o) a
 type CBuilder s a = Builder s s a
 
-{-
-vrFromString :: LLVMType String -> ValueRef t
-vrFromString = vrFromName . LL.Name
--}
-vrFromName :: SLLVMType t -> LL.Name -> ValueRef t
-vrFromName t = (ValueRef t) . LL.LocalReference
+
+vrFromString :: SLLVMType t -> String -> VR t
+vrFromString t = vrFromName t . LL.Name
+
+vrFromName :: SLLVMType t -> LL.Name -> VR t
+vrFromName t = (SValueRef t) . LL.LocalReference
 
 
 runBuilder :: Builder Setup Terminated () -> String -> LL.Global
@@ -81,21 +80,27 @@ getNextUnName = do
 	c <- getAndIncrementCount
 	return $ LL.UnName c
 
-sparameterToLLVMParameter :: SList (t :: [Parameter]) -> [LL.Parameter]
-sparameterToLLVMParameter ps = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) (fromSing ps)
+sListParamToSListValueRef :: SList (t :: [Parameter]) -> SList (ParametersToValueRefs t)
+sListParamToSListValueRef SNil = SNil
+sListParamToSListValueRef (SCons (SParam n t) ps) = SCons (vrFromString t n) $ sListParamToSListValueRef ps
 
-sListParamToSListLLVMType :: SList (t :: [Parameter]) -> SList (ParametersToLLVMTypes t)
-sListParamToSListLLVMType SNil = SNil
-sListParamToSListLLVMType (SCons (SParam _ t) ps) = SCons t $ sListParamToSListLLVMType ps
+sAppendName :: SList (t :: [Parameter]) -> CBuilder Setup (SList t)
+sAppendName SNil = return SNil
+sAppendName (SCons (SParam n t) ps) = do
+	c <- getAndIncrementCount
+	ps' <- sAppendName ps
+	return $ SCons (SParam (n ++ "." ++ show c) t) ps'
 
-setParameters :: SList (t :: [Parameter]) -> CBuilder Setup (SList (ParametersToLLVMTypes t))
+slength :: SList (t :: [k]) -> Int
+slength SNil = 0
+slength (SCons _ xs) = 1 + slength xs 
+
+setParameters :: SList (t :: [Parameter]) -> CBuilder Setup (SList (ParametersToValueRefs t))
 setParameters ps = do
-	renamed <- flip mapM (fromSing ps) $ \(ParamTerm n t) -> do
-		c <- getAndIncrementCount
-		return $ ParamTerm (n ++ "." ++ show c) t
-	let llparams = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) renamed
+	renamed <- sAppendName ps
+	let llparams = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) (fromSing renamed)
 	parameters .= llparams
-	return $ sListParamToSListLLVMType ps
+	return $ sListParamToSListValueRef ps
 {-
 getParameter :: SNat -> CBuilder BasicBlock ValueRef
 getParameter i = do
@@ -129,7 +134,7 @@ switchTo (BasicBlockRef n) = do
 		Just Nothing -> innerState .== BasicBlock [] n
 		Nothing -> error "wtf?"
 
-appendInstr :: SLLVMType t -> LL.Instruction -> CBuilder BasicBlock (ValueRef t)
+appendInstr :: SLLVMType t -> LL.Instruction -> CBuilder BasicBlock (VR t)
 appendInstr t instr = do
 	n <- getNextUnName
 	let i = n LL.:= instr
