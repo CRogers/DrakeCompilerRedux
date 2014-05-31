@@ -6,14 +6,17 @@ module LLVMBuilder.Examples where
 import Prelude hiding (Monad(..))
 import IxMonadSyntax
 
+import Data.Singletons.Prelude.List (Sing(..))
+
 import LLVMBuilder.Builder
 
 c3 :: VR I32
 c3 = constant sn32 3
 
-test :: Builder Setup '[] Terminated '[I32] ()
+test :: Builder Setup '[] 'VoidTy Terminated '[I32] I32 ()
 test = do
-	ps <- setParameters $ SCons (SParam "cat" i32) SNil
+	setParameters $ SCons (SParam "cat" i32) SNil
+	setReturnType i32
 
 	entry <- createBasicBlock "entry"
 
