@@ -59,6 +59,19 @@ instance SingKind ('KProxy :: KProxy Parameter) where
   toSing (ParamTerm s t) = case toSing t of
                SomeSing t' -> SomeSing (SParam s t')
 
+genDefunSymbols [''Parameter]
+
+promoteOnly [d|
+	lLVMTypesToParams :: [LLVMType] -> [Parameter]
+	lLVMTypesToParams = map Param
+
+	paramToLLVMType :: Parameter -> LLVMType
+	paramToLLVMType (Param t) = t
+
+	paramsToLLVMTypes :: [Parameter] -> [LLVMType]
+	paramsToLLVMTypes = map paramToLLVMType
+ |]
+
 data ValueRef = ValueRef LLVMType
 data ValueRefTerm = ValueRefTerm LL.Operand LLVMType
 
@@ -69,12 +82,15 @@ type SValueRef (x :: ValueRef) = Sing x
 
 type VR t = SValueRef ('ValueRef t)
 
-genDefunSymbols [''Parameter, ''ValueRef]
+genDefunSymbols [''ValueRef]
 
 promoteOnly [d|
-	parameterToValueRef :: Parameter -> ValueRef
-	parameterToValueRef (Param t) = ValueRef t
+	paramToValueRef :: Parameter -> ValueRef
+	paramToValueRef (Param t) = ValueRef t
 
-	parametersToValueRefs :: [Parameter] -> [ValueRef]
-	parametersToValueRefs = map parameterToValueRef
+	paramsToValueRefs :: [Parameter] -> [ValueRef]
+	paramsToValueRefs = map paramToValueRef
+
+	lLVMTypesToValueRefs :: [LLVMType] -> [ValueRef]
+	lLVMTypesToValueRefs = map ValueRef 
  |]

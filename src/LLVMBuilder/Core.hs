@@ -32,13 +32,13 @@ makeLenses ''BasicBlock
 data Terminated = Terminated deriving Show
 data Setup = Setup deriving Show
 
-data FState a = FState {
+data FState a (paramTypes :: [LLVMType]) = FState {
 	_basicBlocks :: Map LL.Name (Maybe LL.BasicBlock),
 	_basicBlockOrder :: [LL.Name],
 	_refCount :: Word,
-	_parameters :: [LL.Parameter],
+	_parameters :: SList (LLVMTypesToParams paramTypes),
 	_innerState :: a
-} deriving Show
+}
 makeLenses ''FState
 
 newtype Builder' i o a = Builder { unBuilder :: IxState i o a }
@@ -47,8 +47,9 @@ newtype Builder' i o a = Builder { unBuilder :: IxState i o a }
 deriving instance Prelude.Monad (Builder' i i)
 deriving instance MonadState i (Builder' i i)
 
-type Builder i o a = Builder' (FState i) (FState o) a
-type CBuilder s a = Builder s s a
+type Builder i ips o ops a = Builder' (FState i ips) (FState o ops) a
+type IBuilder i o ps a = Builder i ps o ps a
+type CBuilder s ps a = Builder s ps s ps a
 
 
 vrFromString :: SLLVMType t -> String -> VR t
@@ -58,13 +59,14 @@ vrFromName :: SLLVMType t -> LL.Name -> VR t
 vrFromName t = (SValueRef t) . LL.LocalReference
 
 
-runBuilder :: Builder Setup Terminated () -> String -> LL.Global
+runBuilder :: Builder Setup '[] Terminated ops () -> String -> LL.Global
 runBuilder (Builder s) nameStr =
-	let initialState = FState M.empty [] 0 [] Setup in
+	let initialState = FState M.empty [] 0 SNil Setup in
 	let fstate = snd $ runIxState s initialState in
 	let basicBlockNames = reverse $ fstate ^. basicBlockOrder in
 	let bblocks = catMaybes $ catMaybes $ map (flip M.lookup $ fstate ^. basicBlocks) basicBlockNames in
-	let llparams = fstate ^. parameters in
+	let params = fstate ^. parameters in
+	let llparams = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) (fromSing params) in
 	LLG.functionDefaults {
 		LLG.name = LL.Name nameStr,
 		LLG.returnType = LL.IntegerType 32,
@@ -72,19 +74,19 @@ runBuilder (Builder s) nameStr =
 		LLG.basicBlocks = bblocks
 	}
 
-getAndIncrementCount :: CBuilder a Word
+getAndIncrementCount :: CBuilder a ps Word
 getAndIncrementCount = refCount <<+= 1
 
-getNextUnName :: CBuilder a LL.Name
+getNextUnName :: CBuilder a ps LL.Name
 getNextUnName = do
 	c <- getAndIncrementCount
 	return $ LL.UnName c
 
-sListParamToSListValueRef :: SList (t :: [Parameter]) -> SList (ParametersToValueRefs t)
+sListParamToSListValueRef :: SList (t :: [Parameter]) -> SList (ParamsToValueRefs t)
 sListParamToSListValueRef SNil = SNil
 sListParamToSListValueRef (SCons (SParam n t) ps) = SCons (vrFromString t n) $ sListParamToSListValueRef ps
 
-sAppendName :: SList (t :: [Parameter]) -> CBuilder Setup (SList t)
+sAppendName :: SList (t :: [Parameter]) -> CBuilder Setup ps (SList t)
 sAppendName SNil = return SNil
 sAppendName (SCons (SParam n t) ps) = do
 	c <- getAndIncrementCount
@@ -95,11 +97,10 @@ slength :: SList (t :: [k]) -> Int
 slength SNil = 0
 slength (SCons _ xs) = 1 + slength xs 
 
-setParameters :: SList (t :: [Parameter]) -> CBuilder Setup (SList (ParametersToValueRefs t))
+setParameters :: SList (LLVMTypesToParams ts) -> Builder Setup ips Setup ts (SList (ParamsToValueRefs (LLVMTypesToParams ts)))
 setParameters ps = do
 	renamed <- sAppendName ps
-	let llparams = map (\(ParamTerm n t) -> LL.Parameter (fromLLVM t) (LL.Name n) []) (fromSing renamed)
-	parameters .= llparams
+	parameters .== renamed
 	return $ sListParamToSListValueRef ps
 {-
 getParameter :: SNat -> CBuilder BasicBlock ValueRef
@@ -109,7 +110,7 @@ getParameter i = do
 	let (LLG.Parameter _ n _) = fst ps !! i
 	return $ vrFromName n
 -}
-createBasicBlock :: String -> CBuilder a BasicBlockRef
+createBasicBlock :: String -> CBuilder a ps BasicBlockRef
 createBasicBlock n = do
 	c <- getAndIncrementCount
 	let name = LL.Name $ n ++ "." ++ show c
@@ -126,7 +127,7 @@ type family SetupOrTerminated a where
 
 type IsSetupOrTerminated a = SetupOrTerminated a ~ True
 
-switchTo :: IsSetupOrTerminated a => BasicBlockRef -> Builder a BasicBlock ()
+switchTo :: IsSetupOrTerminated a => BasicBlockRef -> Builder a ps BasicBlock ps ()
 switchTo (BasicBlockRef n) = do
 	bbs <- ixuse basicBlocks
 	case M.lookup n bbs of
@@ -134,14 +135,14 @@ switchTo (BasicBlockRef n) = do
 		Just Nothing -> innerState .== BasicBlock [] n
 		Nothing -> error "wtf?"
 
-appendInstr :: SLLVMType t -> LL.Instruction -> CBuilder BasicBlock (VR t)
+appendInstr :: SLLVMType t -> LL.Instruction -> CBuilder BasicBlock ps (VR t)
 appendInstr t instr = do
 	n <- getNextUnName
 	let i = n LL.:= instr
 	innerState.instrs %== (i :)
 	return $ vrFromName t n
 
-appendTerm :: LL.Terminator -> Builder BasicBlock Terminated ()
+appendTerm :: LL.Terminator -> Builder BasicBlock ps Terminated ps ()
 appendTerm t = do
 	is <- ixuse $ innerState.instrs
 	curBlock <- ixuse $ innerState.currentBlock

@@ -10,25 +10,25 @@ import LLVMBuilder.LLTypes
 import qualified LLVM.General.AST as LL
 import qualified LLVM.General.AST.Constant as LLC
 
-add :: VR t -> VR t -> CBuilder BasicBlock (VR t)
+add :: VR t -> VR t -> CBuilder BasicBlock ps (VR t)
 add (SValueRef t x) (SValueRef _ y) = appendInstr t $ LL.Add False False x y []
 
-alloca :: SLLVMType t -> VR ('IntTy N32) -> CBuilder BasicBlock (VR ('PointerTy t))
+alloca :: SLLVMType t -> VR ('IntTy N32) -> CBuilder BasicBlock ps (VR ('PointerTy t))
 alloca t (SValueRef _ n) = appendInstr (SPointerTy t) $ LL.Alloca (fromSLLVM t) (Just n) 0 []
 
-load :: VR ('PointerTy t) -> CBuilder BasicBlock (VR t)
+load :: VR ('PointerTy t) -> CBuilder BasicBlock ps (VR t)
 load (SValueRef (SPointerTy t) addr) = appendInstr t $ LL.Load False addr Nothing 0 []
 
-store :: VR ('PointerTy t) -> VR t -> CBuilder BasicBlock (VR 'VoidTy)
+store :: VR ('PointerTy t) -> VR t -> CBuilder BasicBlock ps (VR 'VoidTy)
 store (SValueRef _ addr) (SValueRef _ val) = appendInstr SVoidTy $ LL.Store False addr val Nothing 0 []
 
-ret :: VR t -> Builder BasicBlock Terminated ()
+ret :: VR t -> IBuilder BasicBlock Terminated ps ()
 ret (SValueRef _ x) = appendTerm $ LL.Ret (Just x) []
 
-br :: BasicBlockRef -> Builder BasicBlock Terminated ()
+br :: BasicBlockRef -> IBuilder BasicBlock Terminated ps ()
 br (BasicBlockRef n) = appendTerm $ LL.Br n [] 
 
-condBr :: VR BoolTy -> BasicBlockRef -> BasicBlockRef -> Builder BasicBlock Terminated ()
+condBr :: VR BoolTy -> BasicBlockRef -> BasicBlockRef -> IBuilder BasicBlock Terminated ps ()
 condBr (SValueRef _ cond) (BasicBlockRef true) (BasicBlockRef false) = appendTerm $ LL.CondBr cond true false []
  
 constant :: SNat n -> Integer -> VR ('IntTy n)

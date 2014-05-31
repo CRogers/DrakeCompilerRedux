@@ -13,7 +13,7 @@ import LLVMBuilder.Builder
 c3 :: VR I32
 c3 = constant sn32 3
 
-test :: Builder Setup Terminated ()
+test :: Builder Setup '[] Terminated '[I8] ()
 test = do
 	ps <- setParameters $ SCons (SParam "cat" i8) SNil
 	let cat = sHead ps
