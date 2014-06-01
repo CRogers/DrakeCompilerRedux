@@ -100,11 +100,10 @@ slength :: SList (t :: [k]) -> Int
 slength SNil = 0
 slength (SCons _ xs) = 1 + slength xs 
 
-setParameters :: SList (LLVMTypesToParams ts) -> Builder Setup ips r Setup ts r (SList (ParamsToValueRefs (LLVMTypesToParams ts)))
+setParameters :: SList (LLVMTypesToParams ts) -> Builder Setup ips r Setup ts r ()
 setParameters ps = do
 	renamed <- sAppendName ps
 	parameters .== renamed
-	return $ sListParamToSListValueRef ps
 
 getParameter :: (At n (LLVMTypesToParams ts) ~ 'Param t) => SNat n -> CBuilder BasicBlock ts r (VR t)
 getParameter n = do
